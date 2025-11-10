@@ -48,17 +48,16 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> registerUser(@Valid @RequestBody UserRegistrationRequest request) {
 
-        // 1. Check for existing email (Business Logic Validation)
+        // Check for existing email (Business Logic Validation)
         if (userService.findByEmail(request.getEmail()).isPresent()) {
             // Return 400 Bad Request if email exists, with a clear message map
             return ResponseEntity.badRequest().body(Map.of("message", "Error: Email is already in use!"));
         }
 
-        // 2. Create and save the new user (UserService handles hashing and role assignment)
+        // Create and save the new user (UserService handles hashing and role assignment)
         User newUser = new User(request.getName(), request.getEmail(), request.getPassword());
         User createdUser = userService.registerNewUser(newUser);
 
-        // 3. Return 201 Created with clean user data (REST standard)
         return ResponseEntity.status(HttpStatus.CREATED).body(
                 Map.of(
                         "id", createdUser.getId(),
@@ -85,7 +84,7 @@ public class AuthController {
             //  Prepare the successful response
             UserDetails userDetails = (UserDetails) authentication.getPrincipal();
 
-            // *** FUTURE STEP: JWT generation will replace this simple response ***
+
             return ResponseEntity.ok(Map.of(
                     "message", "Login successful.",
                     "email", userDetails.getUsername(),
@@ -95,9 +94,22 @@ public class AuthController {
             ));
 
         } catch (Exception e) {
-            // Handle failed authentication (e.g., bad credentials)
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(
-                    Map.of("message", "Invalid email or password.")
+            // Print the full stack trace to see the REAL error
+            e.printStackTrace();
+
+            // Check if the exception is a specific Spring one (like BadCredentialsException)
+            if (e instanceof org.springframework.security.core.AuthenticationException) {
+                // If it's a security exception, it means the password failed verification,
+                // but based on logs, this is unlikely.
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(
+                        Map.of("message", "Invalid email or password.") // Your existing message
+                );
+            }
+
+            // If it's any other exception (like a NullPointerException from JwtUtils),
+            // return a generic error or the actual exception message.
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                    Map.of("message", "Token generation failed: " + e.getMessage())
             );
         }
     }

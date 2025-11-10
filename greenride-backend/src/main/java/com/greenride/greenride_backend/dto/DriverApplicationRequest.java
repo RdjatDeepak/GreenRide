@@ -2,11 +2,11 @@ package com.greenride.greenride_backend.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
-import lombok.Getter; // Imported, so we use it!
-import lombok.Setter; // You should add @Setter too for consistency
+import lombok.Getter;
+import lombok.Setter;
 
-@Getter // <-- Lombok generates
-@Setter
+@Getter // <-- Lombok generates getter
+@Setter //Setters
 public class DriverApplicationRequest {
 
     @NotBlank(message = "License number is required.")

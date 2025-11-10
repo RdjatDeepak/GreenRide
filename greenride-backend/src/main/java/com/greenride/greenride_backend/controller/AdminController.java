@@ -1,6 +1,7 @@
 package com.greenride.greenride_backend.controller;
 
 import com.greenride.greenride_backend.model.DriverProfile;
+import com.greenride.greenride_backend.model.User;
 import com.greenride.greenride_backend.model.Vehicle;
 import com.greenride.greenride_backend.service.AdminService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,11 +13,22 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin")
-@PreAuthorize("hasRole('ADMIN')")
+//@PreAuthorize("hasAuthority('ADMIN')")   securityConfig have that preAuth for Admin << by hasAnyRole
 public class AdminController {
 
     @Autowired
     private AdminService adminService;
+    // get all approved drivers
+
+    @GetMapping("/drivers")
+    public ResponseEntity<List<User>> getAllApprovedDrivers() {
+        // You MUST implement AdminService.getAllApprovedDrivers() to fetch
+        // users who have the 'ROLE_DRIVER' authority/role.
+        List<User> approvedDrivers = adminService.getAllApprovedDrivers();
+        return ResponseEntity.ok(approvedDrivers);
+    }
+
+
     //approve driver applications
     @PostMapping("/approve-driver/{userId}")
     public ResponseEntity<DriverProfile> approveDriver(@PathVariable Long userId){

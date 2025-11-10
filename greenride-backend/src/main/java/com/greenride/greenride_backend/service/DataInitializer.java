@@ -26,15 +26,13 @@ public class DataInitializer implements CommandLineRunner {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
-
-    // ERROR FIX 2: MUST be public and have throws Exception
     @Override
     public void run(String... args) throws Exception {
 
         // Ensure consistent casing for the lookup email
         String adminEmail = "admin@greenride.com";
 
-        // 1. Ensure all Roles exist
+        // Ensure all Roles exist
         Role adminRole = roleRepository.findByName(ERole.ROLE_ADMIN)
                 .orElseGet(() -> roleRepository.save(new Role(ERole.ROLE_ADMIN)));
 
@@ -44,7 +42,7 @@ public class DataInitializer implements CommandLineRunner {
         roleRepository.findByName(ERole.ROLE_USER)
                 .orElseGet(()-> roleRepository.save(new Role(ERole.ROLE_USER)));
 
-        // 2. Creating a default admin user if one doesn't exist
+        // Creating a default admin user if one doesn't exist
         Optional<User> adminUser = userRepository.findByEmail(adminEmail);
         if(adminUser.isEmpty()) {
             User admin = new User();

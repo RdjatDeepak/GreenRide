@@ -1,8 +1,7 @@
 package com.greenride.greenride_backend.dto;
 
-// Note: Validation constraints are often omitted for LoginRequest in simple APIs,
-// but can be added if specific format checks are needed before authentication.
 
+// we can use Lombok
 public class LoginRequest {
     private String email;
     private String password;

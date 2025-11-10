@@ -14,6 +14,8 @@ import com.greenride.greenride_backend.repository.VehicleRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import jakarta.persistence.EntityNotFoundException;
+
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 @Service
@@ -26,6 +28,16 @@ public class AdminService {
     private DriverProfileRepository driverProfileRepository;
     @Autowired
     private VehicleRepository vehicleRepository;
+
+    public List<User> getAllApprovedDrivers(){
+        final String Driver_ROLE_STRING = ERole.ROLE_DRIVER.name();
+        Role driverRole = roleRepository.findByName(ERole.valueOf(Driver_ROLE_STRING)).orElse(null);
+
+        if(driverRole == null){
+            return Collections.emptyList();
+        }
+        return userRepository.findAllByRolesContaining(driverRole);
+    }
     //approval for driver verification status
     public DriverProfile approveDriver(Long userID){
         DriverProfile driverProfile = driverProfileRepository.findByUserId(userID)
@@ -42,6 +54,7 @@ public class AdminService {
         userRepository.save(user);
         return driverProfileRepository.save(driverProfile);
     }
+    // this for get pending applicationss
     public List<DriverProfile> getPendingDriverApplications(){
         return driverProfileRepository.findByVerificationStatus(DriverVerificationStatus.PENDING);
     }

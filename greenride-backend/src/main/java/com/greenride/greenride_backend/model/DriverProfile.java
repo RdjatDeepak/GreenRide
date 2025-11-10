@@ -1,7 +1,10 @@
 package com.greenride.greenride_backend.model;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import  jakarta.persistence.*;
 @Entity
 @Table(name = "driver_profiles")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class DriverProfile {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -9,6 +12,7 @@ public class DriverProfile {
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id" , unique = true , nullable = false)
+    @JsonIgnore
     private  User user;
 
     private String licenseNumber;

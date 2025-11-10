@@ -4,6 +4,7 @@ import com.greenride.greenride_backend.security.AuthTokenFilter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -11,6 +12,8 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.authority.mapping.GrantedAuthoritiesMapper;
+import org.springframework.security.core.authority.mapping.SimpleAuthorityMapper;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -40,10 +43,21 @@ public class SecurityConfig {
     public AuthTokenFilter authenticationJwtTokenFilter(){
         return new AuthTokenFilter();
     }
+    // Inside your SecurityConfig class
+    @Bean
+    public GrantedAuthoritiesMapper grantedAuthoritiesMapper() {
+        SimpleAuthorityMapper authorityMapper = new SimpleAuthorityMapper();
+        // This setting ensures that authorities read from the token
+        // are used directly without adding the "ROLE_" prefix.
+        authorityMapper.setConvertToUpperCase(true); // Ensures consistency if roles are lowercased
+        authorityMapper.setDefaultAuthority("USER"); // Default for unmapped users
+        return authorityMapper;
+    }
     @Bean
     public DaoAuthenticationProvider authenticationProvider(){
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
         authProvider.setUserDetailsService(userDetailsService);
+        authProvider.setAuthoritiesMapper(grantedAuthoritiesMapper()); //explicitly grant authority
         authProvider.setPasswordEncoder(passwordEncoder());
         return authProvider;
     }
@@ -58,7 +72,9 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         // Set allowed origins for your React app
-        configuration.setAllowedOrigins(List.of("http://localhost:3000"));
+//        configuration.setAllowedOrigins(List.of("http://localhost:3000"));
+        // Set allowed origins for Vite app and vite port is 5173
+        configuration.setAllowedOrigins(List.of("http://localhost:5173"));
         // Allow all necessary headers and methods
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
@@ -68,8 +84,6 @@ public class SecurityConfig {
         source.registerCorsConfiguration("/**", configuration); // Apply to all endpoints
         return source;
     }
-
-    // 2. The filterChain uses the method name directly, which is correct
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
@@ -83,6 +97,14 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**"
                         ).permitAll()
+                        .requestMatchers("/error").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/drivers/apply/status").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/drivers/apply").authenticated()
+
+                        .requestMatchers("/api/admin/**").hasAnyRole("ADMIN")
+
+                        // hasAnyRole for api these roles are necessary to access this
+                        .requestMatchers("/api/drivers/**").hasAnyRole("DRIVER", "ADMIN")
                         .anyRequest().authenticated()
                 );
         http.addFilterBefore(authenticationJwtTokenFilter() , UsernamePasswordAuthenticationFilter.class);
