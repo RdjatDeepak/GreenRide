@@ -78,7 +78,8 @@ export const deleteVehicle = async (vehicleId) => {
  */
 export const assignDriverToVehicle = async (vehicleId, driverId) => {
   try {
-    const response = await api.post(`/admin/vehicles/${vehicleId}/assign-driver`, { driverId });
+    // Backend expects path params: /api/admin/vehicle/assign/{vehicleId}/{driverId}
+    const response = await api.post(`/admin/vehicle/assign/${vehicleId}/${driverId}`);
     return {
       success: true,
       data: response.data,

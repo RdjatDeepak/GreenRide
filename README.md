@@ -1,2 +1,3 @@
 # GreenRide
-Ride hailing platform my new Project using Machine Learning for route optimizarion 
+Ride hailing platform my new Project using Machine Learning for route optimizarion
+The GreenRide platform's architecture is designed for high availability and elastic scalability to support a rapidly expanding fleet and user base. Our current monolithic Spring Boot backend provides a strong foundation, but to handle anticipated volume, the system would immediately transition to a Microservices Architecture. This involves breaking the system into distinct, independently deployable services (e.g., dedicated Auth Service)to ensure development velocity and fault isolation.

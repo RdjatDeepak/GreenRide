@@ -70,8 +70,10 @@ const PassengerHome = () => {
   const canSubmitRequest = () => {
     if (isLoadingStatus) return false;
     if (!driverRequestStatus) return true;
-    const status = driverRequestStatus.status?.toUpperCase();
-    return status === 'REJECTED' || status === null;
+    const rawStatus = driverRequestStatus.status || driverRequestStatus.state || driverRequestStatus.currentStatus;
+    const status = typeof rawStatus === 'string' ? rawStatus.toUpperCase() : undefined;
+    // Allow submit when there is no status yet, or when previously rejected
+    return !status || status === 'REJECTED';
   };
 
   return (
@@ -95,7 +97,6 @@ const PassengerHome = () => {
               <button
                 onClick={() => setShowDriverRequestForm(true)}
                 className="become-driver-btn"
-                disabled={!canSubmitRequest()}
               >
                 {getDriverRequestButtonText()}
               </button>

@@ -1,5 +1,7 @@
 package com.greenride.greenride_backend.controller;
 
+import com.greenride.greenride_backend.dto.PendingDriverDTO;
+import com.greenride.greenride_backend.dto.VehicleDTO;
 import com.greenride.greenride_backend.model.DriverProfile;
 import com.greenride.greenride_backend.model.User;
 import com.greenride.greenride_backend.model.Vehicle;
@@ -37,8 +39,8 @@ public class AdminController {
     }
     //get all pending driver applications for review
     @GetMapping("/pending-drivers")
-    public ResponseEntity<List<DriverProfile>> getPendingDriverApplication(){
-        List<DriverProfile>pendingDrivers = adminService.getPendingDriverApplications();
+    public ResponseEntity<List<PendingDriverDTO>> getPendingDriverApplication(){
+        List<PendingDriverDTO>pendingDrivers = adminService.getPendingDriverApplications();
         return ResponseEntity.ok(pendingDrivers);
     }
 
@@ -51,8 +53,8 @@ public class AdminController {
 
     //Get list of all vehicle
     @GetMapping("/vehicles")
-    public ResponseEntity<List<Vehicle>> getAllVehicles(){
-        List<Vehicle> vehicles= adminService.getAllVehicles();
+    public ResponseEntity<List<VehicleDTO>> getAllVehicles(){
+        List<VehicleDTO> vehicles= adminService.getAllVehicles();
         return ResponseEntity.ok(vehicles);
     }
 
@@ -64,7 +66,7 @@ public class AdminController {
     }
 
     //Assign a vehicle to verified driver
-    @PutMapping("/vehicle/assign/{vehicleId}/{driverId}")
+    @PostMapping("/vehicle/assign/{vehicleId}/{driverId}")
     public ResponseEntity<Vehicle> assignVehicleToDriver(@PathVariable Long vehicleId , @PathVariable Long driverId){
         Vehicle assignedVehicle = adminService.assignVehicleToDriver(vehicleId , driverId);
         return  ResponseEntity.ok(assignedVehicle);
