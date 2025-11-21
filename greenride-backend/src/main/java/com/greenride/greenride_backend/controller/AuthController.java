@@ -1,9 +1,12 @@
 package com.greenride.greenride_backend.controller;
 
+import com.greenride.greenride_backend.dto.ForgotPasswordRequest;
+import com.greenride.greenride_backend.dto.ResetPasswordRequest;
 import com.greenride.greenride_backend.dto.UserRegistrationRequest;
 import com.greenride.greenride_backend.dto.LoginRequest;
 import com.greenride.greenride_backend.model.User;
 import com.greenride.greenride_backend.security.JwtUtils;
+import com.greenride.greenride_backend.service.AuthService;
 import com.greenride.greenride_backend.service.UserService;
 
 // Spring Imports
@@ -42,6 +45,9 @@ public class AuthController {
 
     @Autowired
     private JwtUtils jwtUtils;
+
+    @Autowired
+    private AuthService authService;
 //      Handles new user registration.
 //      Maps to: POST /api/auth/register
 
@@ -67,6 +73,7 @@ public class AuthController {
                 )
         );
     }
+
     @PostMapping("/login")
     public ResponseEntity<Map<String, Object>> authenticateUser(@RequestBody LoginRequest loginRequest) {
 
@@ -111,6 +118,57 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                     Map.of("message", "Token generation failed: " + e.getMessage())
             );
+        }
+    }
+    @PostMapping("/forgot-password") // <--- THIS IS THE MISSING PIECE
+    public ResponseEntity<?> forgotPassword(@RequestBody ForgotPasswordRequest request) {
+
+        if (request.getEmail() == null || request.getEmail().isEmpty()) {
+            return ResponseEntity.badRequest().body("Email is required.");
+        }
+
+        try {
+            // Call the service method (token generation, email sending)
+
+            authService.requestPasswordReset(request.getEmail());
+
+            // Return a generic success message for security
+            return ResponseEntity.ok("Password reset link sent to your email, if the account exists.");
+
+        } catch (Exception e) {
+            System.err.println("Password reset failure: " + e.getMessage());
+            return ResponseEntity.internalServerError().body("Could not process reset request due to an internal error.");
+        }
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestBody ResetPasswordRequest request) {
+
+        // 1. Basic Validation
+        if (request.getToken() == null || request.getToken().isEmpty() ||
+                request.getNewPassword() == null || request.getNewPassword().isEmpty()) {
+            return ResponseEntity.badRequest().body("Token and new password are required.");
+        }
+
+        // 2. Password Match Validation
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            return ResponseEntity.badRequest().body("New passwords do not match.");
+        }
+
+        try {
+            // 3. Call the service to validate token and update password
+            boolean success = authService.resetPassword(request.getToken(), request.getNewPassword());
+
+            if (success) {
+                return ResponseEntity.ok("Password successfully reset.");
+            } else {
+                // This covers token not found or token expired
+                return ResponseEntity.badRequest().body("Invalid or expired password reset token.");
+            }
+
+        } catch (Exception e) {
+            System.err.println("Password reset failure: " + e.getMessage());
+            return ResponseEntity.internalServerError().body("Could not complete password reset.");
         }
     }
 

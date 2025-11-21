@@ -23,7 +23,7 @@ const LoginPage = () => {
       if (user.roles?.includes('ROLE_ADMIN')) {
         navigate('/admin/dashboard');
       } else if (user.roles?.includes('ROLE_DRIVER')) {
-        navigate('/driver/home');
+        navigate('/drivers/home');
       } else {
         navigate('/home');
       }
@@ -44,7 +44,7 @@ const LoginPage = () => {
         if (userRoles.includes('ROLE_ADMIN')) {
           navigate('/admin/dashboard');
         } else if (userRoles.includes('ROLE_DRIVER')) {
-          navigate('/driver/home');
+          navigate('/drivers/home');
         } else {
           navigate('/home');
         }
@@ -93,6 +93,9 @@ const LoginPage = () => {
           </button>
         </form>
         
+        <div className="auth-link">
+          <Link to="/forgot-password">Forgot Password?</Link>
+        </div>
         <div className="auth-link">
           Don't have an account? <Link to="/register">Register here</Link>
         </div>

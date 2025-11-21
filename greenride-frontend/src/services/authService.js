@@ -80,6 +80,27 @@ export const getStoredUser = () => {
 };
 
 /**
+ * Forgot password - send reset email
+ * @param {Object} data - Forgot password data
+ * @param {string} data.email - User's email
+ * @returns {Promise<Object>} Forgot password response
+ */
+export const forgotPassword = async (data) => {
+  try {
+    const response = await api.post('/auth/forgot-password', data);
+    return {
+      success: true,
+      data: response.data,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.response?.data?.message || error.message || 'Failed to send reset email',
+    };
+  }
+};
+
+/**
  * Get stored auth token
  * @returns {string|null} Auth token or null
  */

@@ -95,6 +95,10 @@
   opacity: 1;
 }
 
+.live-map-card {
+  padding: 30px 30px 40px 30px;
+}
+
 @keyframes slideDown {
   from {
     opacity: 0;

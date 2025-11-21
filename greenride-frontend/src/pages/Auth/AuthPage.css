@@ -74,6 +74,15 @@
   border: 1px solid #fca5a5;
 }
 
+.auth-success {
+  background: #d1fae5;
+  color: #065f46;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  border: 1px solid #a7f3d0;
+}
+
 .auth-button {
   width: 100%;
   padding: 14px;

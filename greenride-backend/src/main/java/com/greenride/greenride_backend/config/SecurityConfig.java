@@ -53,6 +53,7 @@ public class SecurityConfig {
         authorityMapper.setDefaultAuthority("USER"); // Default for unmapped users
         return authorityMapper;
     }
+
     @Bean
     public DaoAuthenticationProvider authenticationProvider(){
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
@@ -62,11 +63,11 @@ public class SecurityConfig {
         return authProvider;
     }
 
+
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration authenticationConfiguration) throws Exception{
         return authenticationConfiguration.getAuthenticationManager();
     }
-
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
@@ -100,7 +101,7 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/drivers/apply/status").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/drivers/apply").authenticated()
-
+                        .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/api/admin/**").hasAnyRole("ADMIN")
 
                         // hasAnyRole for api these roles are necessary to access this

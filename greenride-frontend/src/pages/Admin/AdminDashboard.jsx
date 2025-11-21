@@ -6,6 +6,7 @@ import VehicleManagement from '../../components/admin/VehicleManagement';
 import ApprovedDriversList from '../../components/admin/ApprovedDriversList';
 import '../Dashboard.css';
 import './AdminDashboard.css';
+import LiveMap from '../../components/Map/LiveMap';
 
 const AdminDashboard = () => {
   const { user } = useAuth();
@@ -44,6 +45,12 @@ const AdminDashboard = () => {
             >
               Approved Drivers
             </button>
+            <button
+              className={`tab-button ${activeTab === 'fleet' ? 'active' : ''}`}
+              onClick={() => setActiveTab('fleet')}
+            >
+              Fleet Tracker
+            </button>
           </div>
 
           <div className="admin-content">
@@ -53,6 +60,11 @@ const AdminDashboard = () => {
             {activeTab === 'vehicles' && <VehicleManagement refreshKey={driversRefreshKey} />}
             {activeTab === 'approvedDrivers' && (
               <ApprovedDriversList refreshKey={driversRefreshKey} />
+            )}
+            {activeTab === 'fleet' && (
+              <div className="fleet-live-map">
+                <LiveMap mode="admin" height={420} />
+              </div>
             )}
           </div>
         </div>

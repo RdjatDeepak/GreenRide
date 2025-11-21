@@ -20,8 +20,10 @@ public class LocationController {
      */
     @MessageMapping("/update-location")
     public void receiveLocation(@Payload LocationUpdateDTO update) {
-        // Business Logic: You would typically validate the carId and update the DB here.
-        // For now, we immediately broadcast it.
+
+        System.out.println("Received live update from Vehicle ID:" + update.getVehicleId()+
+                "at ("+update.getLat()+ " , "+ update.getLng()+
+                ") | Battery : "+ update.getBatteryLevel() + "%");
 
         // Destination: /topic/tracking/{carId}
         // Only passengers subscribed to that specific carId topic will receive the update.

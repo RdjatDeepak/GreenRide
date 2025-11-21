@@ -7,6 +7,8 @@ import lombok.Setter;
 @Setter
 public class LocationUpdateDTO {
     private Long vehicleId;
+    Long driverId;
+    int batteryLevel;
     private double lat;
     private double lng;
 }

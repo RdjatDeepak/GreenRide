@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LoginPage from './pages/Auth/LoginPage';
 import RegisterPage from './pages/Auth/RegisterPage';
+import ForgotPasswordPage from './pages/Auth/ForgotPasswordPage';
 import PassengerHome from './pages/Passenger/PassengerHome';
 import AdminDashboard from './pages/Admin/AdminDashboard';
 import DriverHome from './pages/Driver/DriverHome';
@@ -22,6 +23,7 @@ export default function App() {
           {/* Public */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
           {/* Protected */}
           <Route path="/home" element={<ProtectedRoute element={PassengerHome} />} />

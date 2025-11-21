@@ -5,6 +5,7 @@ import DriverRequestForm from '../../components/driver/DriverRequestForm';
 import { submitDriverRequest, getDriverRequestStatus } from '../../services/driverService';
 import '../Dashboard.css';
 import './PassengerHome.css';
+import LiveMap from '../../components/Map/LiveMap';
 
 const PassengerHome = () => {
   const { user } = useAuth();
@@ -143,6 +144,10 @@ const PassengerHome = () => {
               <div className="dashboard-feature-description">Share your experience</div>
             </div>
           </div>
+        </div>
+
+        <div className="dashboard-card live-map-card">
+          <LiveMap mode="passenger" height={380} />
         </div>
       </div>
 
