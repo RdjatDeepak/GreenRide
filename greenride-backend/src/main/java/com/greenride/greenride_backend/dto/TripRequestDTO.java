@@ -1,5 +1,6 @@
 package com.greenride.greenride_backend.dto;
 
+import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -16,4 +17,7 @@ public class TripRequestDTO {
 
     // The type of EV requested (if applicable, e.g., 'SUV', 'Sedan')
     private String vehicleType;
+    @NotNull(message = "Vehicle ID is required")
+    private Long vehicleId; // the ID of car user clicked
+    private Long passengerId;
 }

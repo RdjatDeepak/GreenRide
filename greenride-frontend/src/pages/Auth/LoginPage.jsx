@@ -23,7 +23,7 @@ const LoginPage = () => {
       if (user.roles?.includes('ROLE_ADMIN')) {
         navigate('/admin/dashboard');
       } else if (user.roles?.includes('ROLE_DRIVER')) {
-        navigate('/drivers/home');
+        navigate('/driver/home');
       } else {
         navigate('/home');
       }
@@ -44,7 +44,7 @@ const LoginPage = () => {
         if (userRoles.includes('ROLE_ADMIN')) {
           navigate('/admin/dashboard');
         } else if (userRoles.includes('ROLE_DRIVER')) {
-          navigate('/drivers/home');
+          navigate('/driver/home');
         } else {
           navigate('/home');
         }

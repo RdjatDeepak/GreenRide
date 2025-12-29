@@ -1,11 +1,18 @@
 package com.greenride.greenride_backend.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
 
 @Entity
+@Getter
+@Setter
 @Table(name = "vehicles")
-public class Vehicle {
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 
+public class Vehicle {
     @Id@GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     private String make;
@@ -13,66 +20,23 @@ public class Vehicle {
 
     @Column(unique = true , nullable = false)
     private  String licensePlate;
+    @JsonProperty("batteryLevel")
+    @Column(name = "current_battery_level")
     private double currentBatteryLevel;
+    @JsonProperty("isAvailable")
     private  boolean isAvailable;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "driver_id")
+    @OneToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "driver_id" , nullable = true)
     private User driver;
+    @JsonProperty("latitude")
+    private double lat;
+    @JsonProperty("longitude")
+    private double lng;
+    private boolean isCharging;
+    private boolean isOnline;
+    @JsonProperty("status")
+    private String status; // e.g., "ACTIVE", "INACTIVE", "MAINTENANCE"
 
-    public Long getId() {
-        return id;
-    }
-
-    public String getMake() {
-        return make;
-    }
-
-    public double getCurrentBatteryLevel() {
-        return currentBatteryLevel;
-    }
-
-    public User getDriver() {
-        return driver;
-    }
-
-    public void setDriver(User driver) {
-        this.driver = driver;
-    }
-
-    public boolean isAvailable() {
-        return isAvailable;
-    }
-
-    public void setAvailable(boolean available) {
-        isAvailable = available;
-    }
-
-    public void setCurrentBatteryLevel(double currentBatteryLevel) {
-        this.currentBatteryLevel = currentBatteryLevel;
-    }
-
-    public void setMake(String make) {
-        this.make = make;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public String getLicensePlate() {
-        return licensePlate;
-    }
-
-    public void setLicensePlate(String licensePlate) {
-        this.licensePlate = licensePlate;
-    }
-
-    public String getModel() {
-        return model;
-    }
-
-    public void setModel(String model) {
-        this.model = model;
-    }
+    private double batteryCapacity;
 }

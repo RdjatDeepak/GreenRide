@@ -13,6 +13,19 @@
   backdrop-filter: blur(10px);
   margin-bottom: 30px;
   color: #333;
+  transition: all 0.3s ease;
+}
+
+.dashboard-card.online {
+  background: rgba(34, 197, 94, 0.1);
+  border: 2px solid #16a34a;
+  box-shadow: 0 10px 40px rgba(34, 197, 94, 0.3);
+}
+
+.dashboard-card.offline {
+  background: rgba(245, 158, 11, 0.1);
+  border: 2px solid #d97706;
+  box-shadow: 0 10px 40px rgba(245, 158, 11, 0.3);
 }
 
 .dashboard-title {

@@ -23,7 +23,7 @@ const AdminDashboard = () => {
         <div className="dashboard-card">
           <div className="welcome-section">
             <h1 className="dashboard-title">Admin Dashboard</h1>
-            <p className="dashboard-subtitle">Welcome, {user?.email || 'Admin'}! Manage the GreenRide system</p>
+            <p className="dashboard-subtitle">Welcome {user?.name || 'Admin'}! Manage the GreenRide system</p>
           </div>
 
           <div className="admin-tabs">
@@ -64,6 +64,16 @@ const AdminDashboard = () => {
             {activeTab === 'fleet' && (
               <div className="fleet-live-map">
                 <LiveMap mode="admin" height={420} />
+              </div>
+            )}
+            {activeTab === 'predictions' && (
+              <div className="fleet-predictions">
+                <h3>Fleet Range Predictions</h3>
+                <p>Monitor vehicle battery predictions and charging requirements across the fleet.</p>
+                {/* Fleet predictions content will be added here */}
+                <div className="predictions-placeholder">
+                  <p>Fleet prediction data will be displayed here, showing vehicles that require charging stops.</p>
+                </div>
               </div>
             )}
           </div>

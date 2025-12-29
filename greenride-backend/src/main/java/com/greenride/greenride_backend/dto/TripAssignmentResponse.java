@@ -17,4 +17,7 @@ public class TripAssignmentResponse {
 
     private int estimatedFare; // Example fare
     private String estimatedArrivalTime; // Example time
+    private String polyline;            // Matches setPolyline()
+    private double predictedEndSoc;     // Matches setPredictedEndSoc()
+    private boolean chargingStopRequired; // Matches setChargingStopRequired()
 }

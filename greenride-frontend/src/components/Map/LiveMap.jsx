@@ -1,334 +1,445 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import WebSocketService from '../../services/WebSocketService';
+import React, { useState, useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+import 'leaflet-routing-machine';
 import './LiveMap.css';
 
-const haversineDistanceKm = (pointA, pointB) => {
-  if (!pointA || !pointB) return null;
-  const toRad = (deg) => (deg * Math.PI) / 180;
-  const R = 6371;
-  const dLat = toRad(pointB.latitude - pointA.latitude);
-  const dLng = toRad(pointB.longitude - pointA.longitude);
-  const lat1 = toRad(pointA.latitude);
-  const lat2 = toRad(pointB.latitude);
+import webSocketService from '../../services/WebSocketService';
+import { calculateRangePrediction, getTrafficLightColor, getAlertMessage } from '../../services/mlService';
+import { getNearbyVehicles } from '../../services/rideService';
+import { getAllVehicles } from '../../services/vehicleService';
 
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return +(R * c).toFixed(2);
+// Standard Leaflet Icon setup (as per our previous conversation)
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+    iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
+    iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
+    shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
+});
+
+// A unique icon for the GreenRide EV - using a data URL to avoid missing file issues
+const evIcon = new L.Icon({
+    iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzUiIGhlaWdodD0iMzUiIHZpZXdCb3g9IjAgMCAzNSAzNSIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjM1IiBoZWlnaHQ9IjM1IiByeD0iOCIgZmlsbD0iIzEwYjk4MSIvPgo8cGF0aCBkPSJNMjIgMTJ2NmgtMnYtNmgyem0tNiAwaDZ2NmgtNnYtNnoiIGZpbGw9IndoaXRlIi8+Cjx0ZXh0IHg9IjE3LjUiIHk9IjMwIiBmb250LXNpemU9IjEwIiBmaWxsPSJ3aGl0ZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+RVY8L3RleHQ+Cjwvc3ZnPg==',
+    iconSize: [35, 35],
+    iconAnchor: [17, 35],
+    popupAnchor: [0, -35],
+});
+
+// Icon for passenger's current location
+const passengerIcon = new L.Icon({
+    iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTAiIGN5PSIxMCIgcj0iOSIgc3Ryb2tlPSIjZmY2YjZiIiBzdHJva2Utd2lkdGg9IjIiIGZpbGw9IiNmZjZiNmIiLz4KPGNpcmNsZSBjeD0iMTAiIGN5PSIxMCIgcj0iNCIgZmlsbD0iI2ZmNmI2YiIvPgo8L3N2Zz4=',
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+    popupAnchor: [0, -10],
+});
+
+// Helper function to calculate distance between two coordinates
+const calculateDistance = (coord1, coord2) => {
+    if (!coord1 || !coord2 || coord1.length !== 2 || coord2.length !== 2) return 0;
+
+    const [lat1, lng1] = coord1;
+    const [lat2, lng2] = coord2;
+
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLng/2) * Math.sin(dLng/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
 };
 
-const formatRelativeTime = (date) => {
-  if (!date) return '—';
-  const diff = Date.now() - date.getTime();
-  if (diff < 60_000) return 'Just now';
-  if (diff < 3_600_000) {
-    const mins = Math.floor(diff / 60_000);
-    return `${mins} min${mins > 1 ? 's' : ''} ago`;
-  }
-  const hrs = Math.floor(diff / 3_600_000);
-  return `${hrs}h ago`;
-};
+const LiveMap = ({ mode = 'passenger', bookedVehicleId, height = 500, onVehicleSelect, selectedVehicle, onDestinationSelect, destination, route }) => {
+    console.log('LiveMap rendered with mode:', mode, 'height:', height);
 
-const LiveMap = ({ mode = 'passenger', height = 360 }) => {
-  const [vehicles, setVehicles] = useState([]);
-  const [selectedVehicleId, setSelectedVehicleId] = useState(null);
-  const [status, setStatus] = useState('connecting');
-  const [lastUpdated, setLastUpdated] = useState(null);
-  const [userLocation, setUserLocation] = useState(null);
-  const [locationError, setLocationError] = useState('');
-  const [summary, setSummary] = useState(null);
+    // State to hold the live position update
+    const [livePosition, setLivePosition] = useState(null);
 
-  useEffect(() => {
-    if (mode !== 'passenger' || userLocation || locationError) return undefined;
-    if (typeof window === 'undefined' || !navigator?.geolocation) {
-      setLocationError('Geolocation unavailable in this browser.');
-      return undefined;
-    }
+    // State for ML predictions
+    const [prediction, setPrediction] = useState(null);
+    const [predictionLoading, setPredictionLoading] = useState(false);
 
-    let cancelled = false;
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        if (cancelled) return;
-        setUserLocation({
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-        });
-      },
-      () => {
-        if (!cancelled) {
-          setLocationError('Permission denied for location.');
-        }
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 8000,
-      }
-    );
+    // State for vehicles (for passenger/admin modes)
+    const [vehicles, setVehicles] = useState([]);
+    const [userLocation, setUserLocation] = useState(null);
+    const [mapError, setMapError] = useState(null);
+    const [mapLoading, setMapLoading] = useState(true);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [mode, userLocation, locationError]);
+    // State for destination and route
+    const [map, setMap] = useState(null);
 
-  useEffect(() => {
-    let unsubscribe = null;
-    let mounted = true;
+    // Default position (e.g., center of your city)
+    const defaultPosition = [28.6139, 77.2090];
 
-    const subscribeToStream = async () => {
-      try {
-        setStatus('connecting');
-        unsubscribe = await WebSocketService.subscribeToVehicleLocations((payload) => {
-          if (!mounted) return;
-          const snapshotVehicles = payload?.vehicles || [];
-          setVehicles(snapshotVehicles);
-          setSummary(payload?.summary || null);
-          setLastUpdated(payload?.receivedAt ? new Date(payload.receivedAt) : new Date());
-          setStatus(payload?.source === 'mock' ? 'demo' : 'live');
-          setSelectedVehicleId((prev) => {
-            if (prev && snapshotVehicles.some((vehicle) => vehicle.id === prev)) {
-              return prev;
+    useEffect(() => {
+        let unsubscribe = null;
+
+        // Function to handle connection success
+        const onConnected = async () => {
+            console.log("WebSocket Connected!");
+
+            // Subscribe to vehicle locations for real-time updates
+            if (bookedVehicleId || mode === 'admin') {
+                try {
+                    unsubscribe = await webSocketService.subscribeToVehicleLocations((data) => {
+                        if (bookedVehicleId) {
+                            // Driver mode: Find the specific vehicle data
+                            const vehicleData = data.vehicles?.find(vehicle => vehicle.id === bookedVehicleId);
+                            if (vehicleData) {
+                                // Update the state with the new live location
+                                setLivePosition([vehicleData.latitude, vehicleData.longitude]);
+                                console.log(`Driver at: ${vehicleData.latitude}, ${vehicleData.longitude}. Battery: ${vehicleData.batteryPct}%`);
+
+                                // Fetch ML prediction when live data is received
+                                fetchPrediction(vehicleData);
+                            }
+                        } else if (mode === 'admin') {
+                            // Admin mode: Only update existing vehicles with real-time data, don't replace the full list
+                            setVehicles(currentVehicles => {
+                                if (!data.vehicles || data.vehicles.length === 0) return currentVehicles;
+
+                                // Update existing vehicles with real-time data only
+                                const updatedVehicles = currentVehicles.map(existingVehicle => {
+                                    const wsVehicle = data.vehicles.find(v => v.id === existingVehicle.id);
+                                    if (wsVehicle) {
+                                        // Merge real-time data with existing vehicle
+                                        return { ...existingVehicle, ...wsVehicle };
+                                    }
+                                    return existingVehicle;
+                                });
+                                console.log(`Admin: Updated ${data.vehicles.length} vehicles with real-time data`);
+                                return updatedVehicles;
+                            });
+                        }
+                    });
+                } catch (error) {
+                    console.error("WebSocket subscription error:", error);
+                }
             }
-            return snapshotVehicles[0]?.id ?? null;
-          });
-        }, { mode });
-      } catch (error) {
-        if (mounted) {
-          setStatus('demo');
+        };
+
+        // Connect when the component mounts
+        webSocketService.connect().then(onConnected).catch((error) => console.error("WebSocket Error:", error));
+
+        // Disconnect when the component unmounts
+        return () => {
+            if (unsubscribe) {
+                unsubscribe();
+            }
+        };
+    }, [bookedVehicleId, mode]); // Re-run effect if the booked vehicle or mode changes
+
+    // Fetch vehicles based on mode
+    useEffect(() => {
+        const fetchVehicles = async () => {
+            try {
+                if (mode === 'passenger') {
+                    // Get user's location for nearby vehicles
+                    if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(
+                            async (position) => {
+                                const lat = position.coords.latitude;
+                                const lng = position.coords.longitude;
+                                console.log('Geolocation obtained:', [lat, lng]);
+                                setUserLocation([lat, lng]);
+
+                                const result = await getNearbyVehicles(lat, lng);
+                                if (result.success) {
+                                    console.log('Nearby vehicles fetched:', result.data);
+                                    console.log('User location:', [lat, lng]);
+                                    console.log('Number of vehicles:', result.data.length);
+                                    setVehicles(result.data);
+                                } else {
+                                    console.error('Failed to fetch nearby vehicles:', result.error);
+                                }
+                                setMapLoading(false);
+                            },
+                            async (error) => {
+                                console.error('Geolocation error:', error);
+                                console.log('Using default location:', defaultPosition);
+                                // Fallback to default location
+                                setUserLocation(defaultPosition);
+
+                                // Still try to fetch vehicles with default location
+                                const result = await getNearbyVehicles(defaultPosition[0], defaultPosition[1]);
+                                if (result.success) {
+                                    console.log('Nearby vehicles fetched with default location:', result.data);
+                                    setVehicles(result.data);
+                                } else {
+                                    console.error('Failed to fetch nearby vehicles with default location:', result.error);
+                                }
+                                setMapLoading(false);
+                            }
+                        );
+                    } else {
+                        setUserLocation(defaultPosition);
+                        setMapLoading(false);
+                    }
+                } else if (mode === 'admin') {
+                    // Get all vehicles for admin
+                    const result = await getAllVehicles();
+                    if (result.success && result.data) {
+                        // Show all vehicles, even those without coordinates
+                        setVehicles(result.data);
+                        console.log(`Admin: Loaded ${result.data.length} vehicles`);
+                    } else {
+                        // No fallback data - vehicles must be added by admin
+                        console.log('Admin: No vehicles available - please add vehicles through admin panel');
+                        setVehicles([]);
+                    }
+                    setMapLoading(false);
+                }
+            } catch (error) {
+                console.error('Failed to fetch vehicles:', error);
+                setMapLoading(false);
+            }
+        };
+
+        if (mode !== 'driver') {
+            fetchVehicles();
+        } else {
+            setMapLoading(false);
         }
-      }
+    }, [mode]);
+
+    // Function to fetch ML prediction
+    const fetchPrediction = async (vehicleData) => {
+        if (!vehicleData) return;
+
+        setPredictionLoading(true);
+        try {
+            // Mock prediction data for now - replace with actual API call
+            const mockPredictionData = {
+                vehicleId: vehicleData.id, // Required for route optimization
+                distance: 45.0, // This should come from trip data
+                temperature: 22.0,
+                current_soc: vehicleData.batteryLevel || 85.0,
+                avg_speed: 55.0
+            };
+
+            const result = await calculateRangePrediction(mockPredictionData);
+            if (result.success) {
+                setPrediction(result.data);
+            }
+        } catch (error) {
+            console.error('Failed to fetch prediction:', error);
+        } finally {
+            setPredictionLoading(false);
+        }
     };
 
-    subscribeToStream();
-
-    return () => {
-      mounted = false;
-      if (typeof unsubscribe === 'function') {
-        unsubscribe();
-      }
-    };
-  }, [mode]);
-
-  const bounds = useMemo(() => {
-    if (!vehicles.length) {
-      return { minLat: 0, maxLat: 0, minLng: 0, maxLng: 0 };
+    // Determine map center based on mode
+    let mapCenter = defaultPosition;
+    if (mode === 'driver' && livePosition) {
+        mapCenter = livePosition;
+    } else if (mode === 'passenger' && userLocation) {
+        mapCenter = userLocation;
+    } else if (mode === 'admin') {
+        mapCenter = defaultPosition;
     }
-    const latitudes = vehicles.map((vehicle) => vehicle.latitude);
-    const longitudes = vehicles.map((vehicle) => vehicle.longitude);
-    return {
-      minLat: Math.min(...latitudes),
-      maxLat: Math.max(...latitudes),
-      minLng: Math.min(...longitudes),
-      maxLng: Math.max(...longitudes),
-    };
-  }, [vehicles]);
 
-  const vehiclesWithPosition = useMemo(() => {
-    if (!vehicles.length) return [];
-    const latRange = bounds.maxLat - bounds.minLat || 0.01;
-    const lngRange = bounds.maxLng - bounds.minLng || 0.01;
-    return vehicles.map((vehicle) => {
-      const left = ((vehicle.longitude - bounds.minLng) / lngRange) * 80 + 10;
-      const top = 90 - ((vehicle.latitude - bounds.minLat) / latRange) * 80;
-      return {
-        ...vehicle,
-        position: {
-          left: `${Math.min(95, Math.max(5, left))}%`,
-          top: `${Math.min(90, Math.max(10, top))}%`,
-        },
-      };
-    });
-  }, [vehicles, bounds]);
-
-  const userMarkerStyle = useMemo(() => {
-    if (!userLocation) return null;
-    const latRange = bounds.maxLat - bounds.minLat || 0.01;
-    const lngRange = bounds.maxLng - bounds.minLng || 0.01;
-    const left = ((userLocation.longitude - bounds.minLng) / lngRange) * 80 + 10;
-    const top = 90 - ((userLocation.latitude - bounds.minLat) / latRange) * 80;
-    return {
-      left: `${Math.min(95, Math.max(5, left))}%`,
-      top: `${Math.min(90, Math.max(10, top))}%`,
-    };
-  }, [userLocation, bounds]);
-
-  const selectedVehicle = useMemo(
-    () => vehiclesWithPosition.find((vehicle) => vehicle.id === selectedVehicleId),
-    [vehiclesWithPosition, selectedVehicleId]
-  );
-
-  const vehiclesForPanel = useMemo(() => {
-    if (!vehicles.length) return [];
-    return vehicles.map((vehicle) =>
-      mode === 'passenger' && userLocation
-        ? {
-            ...vehicle,
-            distanceKm: haversineDistanceKm(userLocation, vehicle),
-          }
-        : { ...vehicle }
-    );
-  }, [vehicles, userLocation, mode]);
-
-  const fleetStats = useMemo(() => {
-    if (!vehicles.length) {
-      return {
-        activeVehicles: 0,
-        avgRange: 0,
-        lowBatteryCount: 0,
-        totalKmDriven: 0,
-      };
-    }
-    return {
-      activeVehicles: summary?.activeVehicles ?? vehicles.length,
-      avgRange:
-        summary?.avgRange ??
-        vehicles.reduce((acc, vehicle) => acc + (vehicle.rangeKm || 0), 0) / vehicles.length,
-      lowBatteryCount: summary?.lowBatteryCount ?? vehicles.filter((vehicle) => (vehicle.batteryPct ?? 100) < 25).length,
-      totalKmDriven:
-        summary?.totalKmDriven ??
-        vehicles.reduce((acc, vehicle) => acc + (vehicle.totalKmDriven || 0), 0),
-    };
-  }, [vehicles, summary]);
-
-  const statusLabel = {
-    connecting: 'Connecting…',
-    live: 'Live data',
-    demo: 'Demo mode',
-  }[status] || 'Connecting…';
-
-  const renderPassengerPanel = () => (
-    <div className="live-map-panel">
-      <div className="panel-header">
-        <h4>Vehicles near you</h4>
-        {userLocation && <span className="panel-pill">Precise location</span>}
-      </div>
-      {locationError && <p className="panel-hint">{locationError}</p>}
-      {!vehicles.length && <p className="panel-hint">Waiting for vehicles...</p>}
-      <ul className="vehicle-list">
-        {vehiclesForPanel
-          .sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0))
-          .slice(0, 4)
-          .map((vehicle) => (
-            <li
-              key={vehicle.id}
-              className={`vehicle-list-item ${selectedVehicleId === vehicle.id ? 'active' : ''}`}
-              onClick={() => setSelectedVehicleId(vehicle.id)}
-            >
-              <div>
-                <p className="vehicle-label">{vehicle.label}</p>
-                <p className="vehicle-meta">{vehicle.driverName}</p>
-              </div>
-              <div>
-                <p className="vehicle-distance">
-                  {vehicle.distanceKm != null ? `${vehicle.distanceKm} km away` : 'Distance n/a'}
-                </p>
-                <p className="vehicle-range">{vehicle.rangeKm?.toFixed?.(0) ?? '--'} km range</p>
-              </div>
-            </li>
-          ))}
-      </ul>
-    </div>
-  );
-
-  const renderAdminPanel = () => (
-    <div className="live-map-panel">
-      <div className="panel-header">
-        <h4>Vehicle telemetry</h4>
-        {selectedVehicle && (
-          <span className="panel-pill">{selectedVehicle.status}</span>
-        )}
-      </div>
-      {selectedVehicle ? (
-        <>
-          <div className="telemetry-card">
-            <h5>{selectedVehicle.label}</h5>
-            <p className="vehicle-meta">Driver: {selectedVehicle.driverName}</p>
-            <div className="telemetry-grid">
-              <div>
-                <span>Remaining range</span>
-                <strong>{selectedVehicle.rangeKm?.toFixed?.(0) ?? '--'} km</strong>
-              </div>
-              <div>
-                <span>Distance driven</span>
-                <strong>{selectedVehicle.totalKmDriven?.toFixed?.(1) ?? '--'} km</strong>
-              </div>
-              <div>
-                <span>Battery</span>
-                <strong>{selectedVehicle.batteryPct ?? '--'}%</strong>
-              </div>
-              <div>
-                <span>Speed</span>
-                <strong>{selectedVehicle.speedKmph ?? '--'} km/h</strong>
-              </div>
+    if (mapLoading) {
+        return (
+            <div style={{
+                height: `${height}px`,
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: '#f5f5f5',
+                border: '1px solid #ddd',
+                borderRadius: '8px'
+            }}>
+                <div style={{ textAlign: 'center', color: '#666' }}>
+                    <p>🗺️ Loading map...</p>
+                    <p style={{ fontSize: '14px' }}>Fetching vehicle data</p>
+                </div>
             </div>
-          </div>
-        </>
-      ) : (
-        <p className="panel-hint">Select a vehicle marker to view details.</p>
-      )}
+        );
+    }
 
-      <h4>Fleet snapshot</h4>
-      <div className="fleet-stats-grid">
-        <div className="fleet-stat">
-          <span>Active EVs</span>
-          <strong>{fleetStats.activeVehicles}</strong>
-        </div>
-        <div className="fleet-stat">
-          <span>Avg range</span>
-          <strong>{fleetStats.avgRange.toFixed(0)} km</strong>
-        </div>
-        <div className="fleet-stat">
-          <span>Driven today</span>
-          <strong>{fleetStats.totalKmDriven.toFixed(0)} km</strong>
-        </div>
-        <div className="fleet-stat warning">
-          <span>Low battery</span>
-          <strong>{fleetStats.lowBatteryCount}</strong>
-        </div>
-      </div>
-    </div>
-  );
+    try {
+        // Validate map center coordinates
+        const validCenter = Array.isArray(mapCenter) && mapCenter.length === 2 &&
+                           !isNaN(mapCenter[0]) && !isNaN(mapCenter[1]) ? mapCenter : defaultPosition;
 
-  return (
-    <div className={`live-map-wrapper live-map-${mode}`}>
-      <div className="live-map-header">
-        <div>
-          <p className="label">Live EV map</p>
-          <h3>Real-time vehicle visibility</h3>
-        </div>
-        <div className="status-block">
-          <span className={`connection-pill status-${status}`}>{statusLabel}</span>
-          <span className="updated-at">Updated {formatRelativeTime(lastUpdated)}</span>
-        </div>
-      </div>
+        return (
+            <div style={{ height: `${height}px`, width: '100%', position: 'relative' }}>
+                <MapContainer
+                    center={validCenter}
+                    zoom={13}
+                    style={{ height: '100%', width: '100%' }}
+                    key={`map-${mode}-${vehicles.length}`} // Force re-render when vehicles change
+                    whenReady={(mapInstance) => {
+                        setMap(mapInstance.target);
+                    }}
+                    eventHandlers={{
+                        click: (e) => {
+                            if (mode === 'passenger' && onDestinationSelect) {
+                                onDestinationSelect([e.latlng.lat, e.latlng.lng]);
+                            }
+                        },
+                    }}
+                >
+                    <TileLayer
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        attribution='&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
+                    />
 
-      <div className="live-map-body">
-          <div className="map-canvas" style={{ minHeight: height }}>
-            <div className="map-grid" />
-            {vehiclesWithPosition.map((vehicle) => (
-              <button
-                key={vehicle.id}
-                className={`vehicle-marker ${selectedVehicleId === vehicle.id ? 'active' : ''}`}
-                style={vehicle.position}
-                onClick={() => setSelectedVehicleId(vehicle.id)}
-                type="button"
-              >
-                <span className="marker-label">{vehicle.label}</span>
-                <span className="marker-battery">{vehicle.batteryPct ?? '--'}%</span>
-              </button>
-            ))}
-            {userMarkerStyle && (
-              <div className="user-marker" style={userMarkerStyle}>
-                <span>You</span>
-              </div>
-            )}
-          </div>
+                    {/* Show live position for driver mode */}
+                    {mode === 'driver' && livePosition && Array.isArray(livePosition) && livePosition.length === 2 && (
+                        <Marker position={livePosition} icon={evIcon}>
+                            <Popup>
+                                Your GreenRide Driver is here!
+                                {prediction && (
+                                    <div>
+                                        <p>Battery: {prediction.finalSOC?.toFixed(1)}%</p>
+                                        <p>Range: ~{prediction.predictedEnergyConsumptionKwh?.toFixed(1)} kWh</p>
+                                    </div>
+                                )}
+                            </Popup>
+                        </Marker>
+                    )}
 
-        {mode === 'passenger' ? renderPassengerPanel() : renderAdminPanel()}
-      </div>
-    </div>
-  );
+                    {/* Show passenger's current location */}
+                    {mode === 'passenger' && userLocation && (
+                        <Marker
+                            position={userLocation}
+                            icon={passengerIcon}
+                        >
+                            <Popup>
+                                <div>
+                                    <h4>Your Current Location</h4>
+                                    <p>You are here!</p>
+                                    <p><strong>Coordinates:</strong> {userLocation[0].toFixed(4)}, {userLocation[1].toFixed(4)}</p>
+                                </div>
+                            </Popup>
+                        </Marker>
+                    )}
+
+                    {/* Show nearby vehicles for passenger mode */}
+                    {mode === 'passenger' && vehicles.filter(vehicle =>
+                        vehicle && (vehicle.latitude || vehicle.lat) && (vehicle.longitude || vehicle.lng)
+                    ).map((vehicle) => (
+                        <Marker
+                            key={`passenger-${vehicle.id}`}
+                            position={[vehicle.latitude || vehicle.lat, vehicle.longitude || vehicle.lng]}
+                            icon={evIcon}
+                            eventHandlers={{
+                                click: () => onVehicleSelect && onVehicleSelect(vehicle),
+                            }}
+                        >
+                            <Popup>
+                                <div>
+                                    <h4>GreenRide Vehicle #{vehicle.id}</h4>
+                                    <p><strong>License Plate:</strong> {vehicle.licensePlate || vehicle.vehicleNumber || 'N/A'}</p>
+                                    <p><strong>Make:</strong> {vehicle.make || 'N/A'}</p>
+                                    <p><strong>Model:</strong> {vehicle.model || 'EV'}</p>
+                                    <p><strong>Type:</strong> {vehicle.type || 'N/A'}</p>
+                                    <p><strong>Color:</strong> {vehicle.color || 'N/A'}</p>
+                                    <p><strong>Battery Level:</strong> {vehicle.currentBatteryLevel || vehicle.batteryLevel || vehicle.batteryPct || 'N/A'}%</p>
+                                    <p><strong>Range:</strong> {vehicle.range || 'N/A'} km</p>
+                                    <p><strong>Status:</strong> {vehicle.status || 'Available'}</p>
+                                    <p><strong>Location:</strong> {(vehicle.latitude || vehicle.lat).toFixed(4)}, {(vehicle.longitude || vehicle.lng).toFixed(4)}</p>
+                                    <p><strong>Distance:</strong> ~{calculateDistance(userLocation, [vehicle.latitude || vehicle.lat, vehicle.longitude || vehicle.lng]).toFixed(1)} km</p>
+                                    <button onClick={() => onVehicleSelect && onVehicleSelect(vehicle)} style={{ marginTop: '10px', padding: '8px 16px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Select Vehicle</button>
+                                </div>
+                            </Popup>
+                        </Marker>
+                    ))}
+
+                    {/* Show all vehicles for admin mode */}
+                    {mode === 'admin' && vehicles.map((vehicle) => {
+                        // Use vehicle coordinates if available, otherwise use default position
+                        const lat = vehicle.latitude || vehicle.lat || defaultPosition[0];
+                        const lng = vehicle.longitude || vehicle.lng || defaultPosition[1];
+                        const hasValidCoords = (vehicle.latitude || vehicle.lat) && (vehicle.longitude || vehicle.lng);
+
+                        return (
+                            <Marker
+                                key={`admin-${vehicle.id}`}
+                                position={[lat, lng]}
+                                icon={evIcon}
+                            >
+                            <Popup>
+                                <div>
+                                    <h4>Vehicle #{vehicle.id}</h4>
+                                    <p><strong>License Plate:</strong> {vehicle.licensePlate || vehicle.vehicleNumber || 'N/A'}</p>
+                                    {vehicle.make && <p><strong>Make:</strong> {vehicle.make}</p>}
+                                    {vehicle.model && <p><strong>Model:</strong> {vehicle.model}</p>}
+                                    {vehicle.type && <p><strong>Type:</strong> {vehicle.type}</p>}
+                                    {vehicle.color && <p><strong>Color:</strong> {vehicle.color}</p>}
+                                    <p><strong>Battery Level:</strong> {vehicle.batteryPct || vehicle.batteryLevel || vehicle.currentBatteryLevel || 'N/A'}%</p>
+                                    {vehicle.range && <p><strong>Range:</strong> {vehicle.range} km</p>}
+                                    <p><strong>Status:</strong> {vehicle.status || 'Unknown'}</p>
+                                    <p><strong>Location:</strong> {(vehicle.latitude || vehicle.lat).toFixed(4)}, {(vehicle.longitude || vehicle.lng).toFixed(4)}</p>
+                                    <p><strong>Driver:</strong> {vehicle.driver?.email || vehicle.driverName || 'Unassigned'}</p>
+                                    {vehicle.driverId && <p><strong>Assigned Driver ID:</strong> {vehicle.driverId}</p>}
+                                    {vehicle.isAvailable !== undefined && <p><strong>Available:</strong> {vehicle.isAvailable ? 'Yes' : 'No'}</p>}
+                                    {vehicle.isOnline !== undefined && <p><strong>Online:</strong> {vehicle.isOnline ? 'Yes' : 'No'}</p>}
+                                    {vehicle.lastUpdated && <p><strong>Last Updated:</strong> {new Date(vehicle.lastUpdated).toLocaleString()}</p>}
+                                </div>
+                            </Popup>
+                        </Marker>
+                        );
+                    })}
+
+                    {/* Show destination marker for passenger mode */}
+                    {mode === 'passenger' && destination && (
+                        <Marker
+                            position={destination}
+                            icon={L.icon({
+                                iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTAiIGN5PSIxMCIgcj0iOSIgc3Ryb2tlPSIjZmYwMDAwIiBzdHJva2Utd2lkdGg9IjIiIGZpbGw9IiNmZjAwMDAiLz4KPGNpcmNsZSBjeD0iMTAiIGN5PSIxMCIgcj0iNCIgZmlsbD0iI2ZmMDAwMCIvPgo8L3N2Zz4=',
+                                iconSize: [20, 20],
+                                iconAnchor: [10, 10],
+                                popupAnchor: [0, -10],
+                            })}
+                        >
+                            <Popup>
+                                <div>
+                                    <h4>Destination</h4>
+                                    <p>Lat: {destination[0].toFixed(4)}, Lng: {destination[1].toFixed(4)}</p>
+                                </div>
+                            </Popup>
+                        </Marker>
+                    )}
+
+                    {/* Show route polyline */}
+                    {route && route.length > 0 && (
+                        <Polyline
+                            positions={route}
+                            color="blue"
+                            weight={5}
+                            opacity={0.7}
+                        />
+                    )}
+                </MapContainer>
+            </div>
+        );
+    } catch (error) {
+        console.error('Map rendering error:', error);
+        setMapError(error.message);
+        return (
+            <div style={{
+                height: `${height}px`,
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: '#f5f5f5',
+                border: '1px solid #ddd',
+                borderRadius: '8px'
+            }}>
+                <div style={{ textAlign: 'center', color: '#666' }}>
+                    <p>🚗 Unable to load map</p>
+                    <p style={{ fontSize: '14px' }}>Error: {error.message}</p>
+                    <p style={{ fontSize: '12px', color: '#999' }}>Mode: {mode}, Vehicles: {vehicles.length}</p>
+                </div>
+            </div>
+        );
+    }
 };
 
 export default LiveMap;
-

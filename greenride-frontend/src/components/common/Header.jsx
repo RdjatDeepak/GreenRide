@@ -29,7 +29,7 @@ const Header = () => {
         </div>
         {isAuthenticated && (
           <div className="header-actions">
-            <span className="user-welcome">Welcome, {user?.email}</span>
+            <span className="user-welcome">Welcome, {user?.name || user?.email}</span>
             <span className="user-role">({getWelcomeMessage()})</span>
             <button onClick={handleLogout} className="logout-btn">
               Logout

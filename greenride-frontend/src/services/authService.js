@@ -33,18 +33,19 @@ export const register = async (userData) => {
 export const login = async (credentials) => {
   try {
     const response = await api.post('/auth/login', credentials);
-    const { accessToken, email, roles } = response.data;
-    
+    const { accessToken, email, roles, name } = response.data;
+
     // Store token and user data
     localStorage.setItem('authToken', accessToken);
-    localStorage.setItem('user', JSON.stringify({ email, roles }));
-    
+    localStorage.setItem('user', JSON.stringify({ email, roles, name }));
+
     return {
       success: true,
       data: {
         token: accessToken,
         email,
         roles,
+        name,
       },
     };
   } catch (error) {

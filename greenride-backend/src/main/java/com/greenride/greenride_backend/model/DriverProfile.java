@@ -1,8 +1,15 @@
 package com.greenride.greenride_backend.model;
+
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import  jakarta.persistence.*;
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+import java.time.LocalDateTime;
+
 @Entity
+@Getter
+@Setter
 @Table(name = "driver_profiles")
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class DriverProfile {
@@ -11,32 +18,27 @@ public class DriverProfile {
     private Long id;
 
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id" , unique = true , nullable = false)
+    @JoinColumn(name = "user_id", unique = true, nullable = false)
     @JsonIgnore
-    private  User user;
+    private User user;
 
     private String licenseNumber;
     private String aadharNumber;
+
     @Enumerated(EnumType.STRING)
     private DriverVerificationStatus verificationStatus;
 
-    public Long getId() { return id;}
+    // --- NEW STATUS & TRACKING FIELDS ---
+    private boolean isOnline;
+    private LocalDateTime lastOnlineTime; // To calculate active hours
 
-    public void setId(Long id) { this.id = id;}
+    // --- EARNINGS & PERFORMANCE ---
+    private double dailyEarnings;
+    private double monthlyEarnings;
+    private double totalEarnings;
+    private double activeHoursToday;
 
-    public String getLicenseNumber() { return licenseNumber;}
-
-    public void setLicenseNumber(String licenseNumber) { this.licenseNumber = licenseNumber;}
-
-    public User getUser() { return user; }
-
-    public void setUser(User user) { this.user = user;}
-
-    public String getAadharNumber() {return aadharNumber;}
-
-    public void setAadharNumber(String aadharNumber) {this.aadharNumber = aadharNumber;}
-
-    public DriverVerificationStatus getVerificationStatus() { return verificationStatus; }
-
-    public void setVerificationStatus(DriverVerificationStatus verificationStatus) { this.verificationStatus = verificationStatus;}
+    // --- LIVE TRIP DATA ---
+    private Long currentTripId; // Null if no active ride
+    private String currentDestination;
 }

@@ -105,8 +105,8 @@ const DriverRequestList = ({ onStatusChanged }) => {
                 <div className="request-info">
                   <div className="request-header">
                     <div>
-                      <h4>{request.name || request.fullName || request.user?.name || request.user?.fullName || request.user?.email || request.email || 'Unknown Applicant'}</h4>
-                      <p className="request-subtitle">{request.email || request.user?.email || 'Email not provided'}</p>
+                      <h4>{request.userName || request.name || request.fullName || request.user?.name || request.user?.fullName || request.user?.email || request.email || 'Unknown Applicant'}</h4>
+                      <p className="request-subtitle">{request.userEmail || request.email || request.user?.email || 'Email not provided'}</p>
                     </div>
                     {getStatusBadge(request)}
                   </div>
@@ -121,6 +121,18 @@ const DriverRequestList = ({ onStatusChanged }) => {
                       <span className="detail-label">License Number:</span>
                       <span className="detail-value">
                         {request.licenseNumber || request.license || request.driverDetails?.licenseNumber || 'N/A'}
+                      </span>
+                    </div>
+                    <div className="detail-item">
+                      <span className="detail-label">User ID:</span>
+                      <span className="detail-value">
+                        {request.userId || 'N/A'}
+                      </span>
+                    </div>
+                    <div className="detail-item">
+                      <span className="detail-label">Verification Status:</span>
+                      <span className="detail-value">
+                        {request.verificationStatus || 'N/A'}
                       </span>
                     </div>
                     <div className="detail-item">

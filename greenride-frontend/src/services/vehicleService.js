@@ -22,22 +22,20 @@ export const getAllVehicles = async () => {
 /**
  * Add a new vehicle (Admin only)
  * @param {Object} vehicleData - Vehicle data
- * @param {string} vehicleData.vehicleNumber - Vehicle number/plate
+ * @param {string} vehicleData.licensePlate - Vehicle license plate
+ * @param {string} vehicleData.make - Vehicle make/brand
  * @param {string} vehicleData.model - Vehicle model
+ * @param {number} vehicleData.batteryLevel - Battery level percentage
+ * @param {string} vehicleData.status - Vehicle status
+ * @param {number} vehicleData.latitude - Latitude
+ * @param {number} vehicleData.longitude - Longitude
  * @param {string} vehicleData.color - Vehicle color
  * @param {string} vehicleData.type - Vehicle type
  * @returns {Promise<Object>} Creation response
  */
 export const addVehicle = async (vehicleData) => {
   try {
-    // Ensure licensePlate is present and non-null string
-    const payload = {
-      licensePlate: String(vehicleData.licensePlate || '').trim(),
-      model: vehicleData.model,
-      color: vehicleData.color,
-      type: vehicleData.type,
-    };
-    const response = await api.post('/admin/vehicles', payload);
+    const response = await api.post('/admin/vehicles', vehicleData);
     return {
       success: true,
       data: response.data,
@@ -88,6 +86,26 @@ export const assignDriverToVehicle = async (vehicleId, driverId) => {
     return {
       success: false,
       error: error.response?.data?.message || error.message || 'Failed to assign driver to vehicle',
+    };
+  }
+};
+
+/**
+ * Unassign driver from vehicle (Admin only)
+ * @param {number} vehicleId - Vehicle ID
+ * @returns {Promise<Object>} Unassignment response
+ */
+export const unassignDriverFromVehicle = async (vehicleId) => {
+  try {
+    const response = await api.post(`/admin/vehicle/unassign/${vehicleId}`);
+    return {
+      success: true,
+      data: response.data,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.response?.data?.message || error.message || 'Failed to unassign driver from vehicle',
     };
   }
 };

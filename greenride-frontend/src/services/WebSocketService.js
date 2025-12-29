@@ -1,5 +1,5 @@
+import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
-import Stomp from 'stompjs/lib/stomp.js';
 
 const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || 'http://localhost:8080/ws';
 const VEHICLE_TOPIC = import.meta.env.VITE_WS_VEHICLE_TOPIC || '/topic/vehicle-locations';
@@ -44,26 +44,29 @@ class WebSocketService {
     }
 
     this.connectionPromise = new Promise((resolve, reject) => {
-      const socket = new SockJS(WS_BASE_URL);
-      const client = Stomp.over(socket);
-      client.debug = null;
-      const headers = {};
       const token = localStorage.getItem('authToken');
+      const headers = {};
       if (token) {
         headers.Authorization = `Bearer ${token}`;
       }
 
-      client.connect(
-        headers,
-        () => {
-          this.client = client;
-          resolve(client);
+      this.client = new Client({
+        webSocketFactory: () => new SockJS(WS_BASE_URL),
+        connectHeaders: headers,
+        onConnect: () => {
+          resolve(this.client);
         },
-        (error) => {
+        onStompError: (frame) => {
+          this.connectionPromise = null;
+          reject(frame.headers['message']);
+        },
+        onWebSocketError: (error) => {
           this.connectionPromise = null;
           reject(error);
         }
-      );
+      });
+
+      this.client.activate();
     });
 
     return this.connectionPromise;
@@ -81,7 +84,7 @@ class WebSocketService {
         }
       });
       resolve(() => {
-        subscription?.unsubscribe();
+        subscription.unsubscribe();
       });
     });
   }
@@ -218,4 +221,3 @@ class WebSocketService {
 
 const webSocketService = new WebSocketService();
 export default webSocketService;
-

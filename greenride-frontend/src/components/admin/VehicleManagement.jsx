@@ -3,6 +3,80 @@ import { getAllVehicles, addVehicle, deleteVehicle, assignDriverToVehicle } from
 import { getApprovedDrivers } from '../../services/driverService';
 import './AdminComponents.css';
 
+// Location Picker Component
+const LocationPicker = ({ onLocationSelect, initialLocation }) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState(initialLocation || null);
+
+  const searchLocation = async () => {
+    if (!searchQuery.trim()) return;
+
+    setIsSearching(true);
+    try {
+      // Using Nominatim API for geocoding (OpenStreetMap)
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`
+      );
+      const data = await response.json();
+
+      if (data && data.length > 0) {
+        const location = {
+          lat: parseFloat(data[0].lat),
+          lng: parseFloat(data[0].lon),
+          displayName: data[0].display_name
+        };
+        setSelectedLocation(location);
+        onLocationSelect(location);
+      } else {
+        alert('Location not found. Please try a different search term.');
+      }
+    } catch (error) {
+      console.error('Geocoding error:', error);
+      alert('Error searching for location. Please try again.');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      searchLocation();
+    }
+  };
+
+  return (
+    <div className="location-picker">
+      <div className="location-search">
+        <input
+          type="text"
+          placeholder="Search for location (e.g., Delhi, India)"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyPress={handleKeyPress}
+        />
+        <button
+          type="button"
+          onClick={searchLocation}
+          disabled={isSearching || !searchQuery.trim()}
+          className="search-btn"
+        >
+          {isSearching ? 'Searching...' : 'Search'}
+        </button>
+      </div>
+      {selectedLocation && (
+        <div className="selected-location">
+          <p><strong>Selected Location:</strong> {selectedLocation.displayName}</p>
+          <p><strong>Coordinates:</strong> {selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)}</p>
+        </div>
+      )}
+      <div className="location-instructions">
+        <small>Enter a location name and click Search, or the coordinates will be set to default (Delhi) if not specified.</small>
+      </div>
+    </div>
+  );
+};
+
 const VehicleManagement = ({ refreshKey = 0 }) => {
   const [vehicles, setVehicles] = useState([]);
   const [drivers, setDrivers] = useState([]);
@@ -13,18 +87,27 @@ const VehicleManagement = ({ refreshKey = 0 }) => {
   const [assigningVehicleId, setAssigningVehicleId] = useState(null);
   const [formData, setFormData] = useState({
     licensePlate: '',
+    make: '',
     model: '',
-    color: '',
+    batteryLevel: 100,
+    status: 'AVAILABLE',
+    latitude: 28.6139, // Default to Delhi
+    longitude: 77.2090,
     type: 'SEDAN',
+    isAvailable: true,
+    isOnline: true,
   });
+  const [selectedLocation, setSelectedLocation] = useState(null);
 
   const totalVehicles = vehicles.length;
   const assignedVehicles = vehicles.filter((vehicle) => Boolean(vehicle.driverId || vehicle.driver)).length;
   const unassignedVehicles = totalVehicles - assignedVehicles;
-  const batterySamples = vehicles.filter((vehicle) => typeof vehicle.batteryLevel === 'number');
+  const batterySamples = vehicles.filter((vehicle) =>
+    typeof (vehicle.batteryPct || vehicle.batteryLevel || vehicle.currentBatteryLevel || vehicle.battery) === 'number'
+  );
   const averageBatteryLevel =
     batterySamples.length > 0
-      ? Math.round(batterySamples.reduce((acc, vehicle) => acc + vehicle.batteryLevel, 0) / batterySamples.length)
+      ? Math.round(batterySamples.reduce((acc, vehicle) => acc + (vehicle.batteryPct || vehicle.batteryLevel || vehicle.currentBatteryLevel || vehicle.battery), 0) / batterySamples.length)
       : null;
 
   const loadData = useCallback(async () => {
@@ -55,7 +138,17 @@ const VehicleManagement = ({ refreshKey = 0 }) => {
     if (result.success) {
       setMessage({ type: 'success', text: 'Vehicle added successfully!' });
       setShowAddForm(false);
-      setFormData({ licensePlate: '', model: '', color: '', type: 'SEDAN' });
+      setFormData({
+        licensePlate: '',
+        make: '',
+        model: '',
+        batteryLevel: 100,
+        status: 'AVAILABLE',
+        latitude: 28.6139,
+        longitude: 77.2090,
+        type: 'SEDAN',
+      });
+      setSelectedLocation(null);
       loadData();
     } else {
       setMessage({ type: 'error', text: result.error || 'Failed to add vehicle' });
@@ -94,12 +187,40 @@ const VehicleManagement = ({ refreshKey = 0 }) => {
     setAssigningVehicleId(null);
   };
 
+  const handleUnassignDriver = async (vehicleId) => {
+    if (!window.confirm('Are you sure you want to unassign this driver from the vehicle?')) {
+      return;
+    }
+
+    setAssigningVehicleId(vehicleId);
+    setMessage({ type: '', text: '' });
+
+    // Use assignDriverToVehicle with driverId 0 to unassign
+    const result = await assignDriverToVehicle(vehicleId, 0);
+    if (result.success) {
+      setMessage({ type: 'success', text: 'Driver unassigned from vehicle successfully!' });
+      loadData();
+    } else {
+      setMessage({ type: 'error', text: result.error || 'Failed to unassign driver' });
+    }
+    setAssigningVehicleId(null);
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
+  };
+
+  const handleLocationSelect = (location) => {
+    setFormData(prev => ({
+      ...prev,
+      latitude: location.lat,
+      longitude: location.lng
+    }));
+    setSelectedLocation(location);
   };
 
   if (isLoading) {
@@ -140,28 +261,57 @@ const VehicleManagement = ({ refreshKey = 0 }) => {
               />
             </div>
             <div className="form-group">
-              <label>Model *</label>
+              <label>Make *</label>
               <input
                 type="text"
-                name="model"
-                value={formData.model}
+                name="make"
+                value={formData.make}
                 onChange={handleInputChange}
-                placeholder="e.g., Tesla Model 3"
+                placeholder="e.g., Tesla"
                 required
               />
             </div>
           </div>
           <div className="form-row">
             <div className="form-group">
-              <label>Color *</label>
+              <label>Model *</label>
               <input
                 type="text"
-                name="color"
-                value={formData.color}
+                name="model"
+                value={formData.model}
                 onChange={handleInputChange}
-                placeholder="e.g., White"
+                placeholder="e.g., Model 3"
                 required
               />
+            </div>
+            <div className="form-group">
+              <label>Battery Level *</label>
+              <input
+                type="number"
+                name="batteryLevel"
+                value={formData.batteryLevel}
+                onChange={handleInputChange}
+                placeholder="e.g., 85"
+                min="0"
+                max="100"
+                required
+              />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Status *</label>
+              <select
+                name="status"
+                value={formData.status}
+                onChange={handleInputChange}
+                required
+              >
+                <option value="AVAILABLE">Available</option>
+                <option value="IN_RIDE">In Ride</option>
+                <option value="CHARGING">Charging</option>
+                <option value="MAINTENANCE">Maintenance</option>
+              </select>
             </div>
             <div className="form-group">
               <label>Type *</label>
@@ -176,6 +326,39 @@ const VehicleManagement = ({ refreshKey = 0 }) => {
                 <option value="HATCHBACK">Hatchback</option>
                 <option value="COMPACT">Compact</option>
               </select>
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Available</label>
+              <select
+                name="isAvailable"
+                value={formData.isAvailable}
+                onChange={(e) => setFormData(prev => ({ ...prev, isAvailable: e.target.value === 'true' }))}
+              >
+                <option value={true}>Yes</option>
+                <option value={false}>No</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Online</label>
+              <select
+                name="isOnline"
+                value={formData.isOnline}
+                onChange={(e) => setFormData(prev => ({ ...prev, isOnline: e.target.value === 'true' }))}
+              >
+                <option value={true}>Yes</option>
+                <option value={false}>No</option>
+              </select>
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group full-width">
+              <label>Location</label>
+              <LocationPicker
+                onLocationSelect={handleLocationSelect}
+                initialLocation={selectedLocation}
+              />
             </div>
           </div>
           <button type="submit" className="btn-submit">Add Vehicle</button>
@@ -220,19 +403,31 @@ const VehicleManagement = ({ refreshKey = 0 }) => {
                     <span className="detail-value">{vehicle.licensePlate || vehicle.vehicleNumber || 'N/A'}</span>
                   </div>
                   <div className="detail-item">
+                    <span className="detail-label">Make:</span>
+                    <span className="detail-value">{vehicle.make || 'N/A'}</span>
+                  </div>
+                  <div className="detail-item">
                     <span className="detail-label">Model:</span>
                     <span className="detail-value">{vehicle.model || 'N/A'}</span>
                   </div>
                   <div className="detail-item">
-                    <span className="detail-label">Color:</span>
-                    <span className="detail-value">{vehicle.color || 'N/A'}</span>
+                    <span className="detail-label">Battery Level:</span>
+                    <span className="detail-value">
+                      {vehicle.batteryPct != null ? `${vehicle.batteryPct}%` :
+                       vehicle.batteryLevel != null ? `${vehicle.batteryLevel}%` :
+                       vehicle.currentBatteryLevel != null ? `${vehicle.currentBatteryLevel}%` : 'N/A'}
+                    </span>
                   </div>
                   <div className="detail-item">
-                    <span className="detail-label">Battery:</span>
+                    <span className="detail-label">Status:</span>
+                    <span className="detail-value">{vehicle.status || 'N/A'}</span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="detail-label">Location:</span>
                     <span className="detail-value">
-                      {typeof vehicle.batteryLevel === 'number'
-                        ? `${vehicle.batteryLevel}%`
-                        : vehicle.chargingStatus || 'N/A'}
+                      {(vehicle.latitude != null || vehicle.lat != null) && (vehicle.longitude != null || vehicle.lng != null)
+                        ? `${Number(vehicle.latitude || vehicle.lat).toFixed(4)}, ${Number(vehicle.longitude || vehicle.lng).toFixed(4)}`
+                        : 'N/A'}
                     </span>
                   </div>
                   <div className="detail-item">
@@ -241,29 +436,80 @@ const VehicleManagement = ({ refreshKey = 0 }) => {
                       {vehicle.driver?.email || vehicle.driverName || 'Unassigned'}
                     </span>
                   </div>
+                  {vehicle.isAvailable !== undefined || vehicle.available !== undefined ? (
+                    <div className="detail-item">
+                      <span className="detail-label">Available:</span>
+                      <span className="detail-value">
+                        {(vehicle.isAvailable ?? vehicle.available) ? 'Yes' : 'No'}
+                      </span>
+                    </div>
+                  ) : null}
+                  {vehicle.isOnline !== undefined || vehicle.online !== undefined ? (
+                    <div className="detail-item">
+                      <span className="detail-label">Online:</span>
+                      <span className="detail-value">
+                        {(vehicle.isOnline ?? vehicle.online) ? 'Yes' : 'No'}
+                      </span>
+                    </div>
+                  ) : null}
+                  {vehicle.color && (
+                    <div className="detail-item">
+                      <span className="detail-label">Color:</span>
+                      <span className="detail-value">{vehicle.color}</span>
+                    </div>
+                  )}
+                  {vehicle.type && (
+                    <div className="detail-item">
+                      <span className="detail-label">Type:</span>
+                      <span className="detail-value">{vehicle.type}</span>
+                    </div>
+                  )}
+                  {vehicle.range && (
+                    <div className="detail-item">
+                      <span className="detail-label">Range:</span>
+                      <span className="detail-value">{vehicle.range} km</span>
+                    </div>
+                  )}
+                  {vehicle.lastUpdated && (
+                    <div className="detail-item">
+                      <span className="detail-label">Last Updated:</span>
+                      <span className="detail-value">{new Date(vehicle.lastUpdated).toLocaleString()}</span>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="vehicle-actions">
                 {drivers.length > 0 && (
-                  <select
-                    className="driver-select"
-                    value={vehicle.driverId || ''}
-                    onChange={(e) => {
-                      const driverId = e.target.value;
-                      if (driverId) {
-                        const numericId = Number(driverId);
-                        handleAssignDriver(vehicle.id, Number.isNaN(numericId) ? driverId : numericId);
-                      }
-                    }}
-                    disabled={assigningVehicleId === vehicle.id}
-                  >
-                    <option value="">Assign Driver</option>
-                    {drivers.map((driver) => (
-                      <option key={driver.id} value={driver.id}>
-                        {driver.email || driver.name}
-                      </option>
-                    ))}
-                  </select>
+                  <>
+                    <select
+                      className="driver-select"
+                      value={vehicle.driverId || ''}
+                      onChange={(e) => {
+                        const driverId = e.target.value;
+                        if (driverId) {
+                          const numericId = Number(driverId);
+                          handleAssignDriver(vehicle.id, Number.isNaN(numericId) ? driverId : numericId);
+                        }
+                      }}
+                      disabled={assigningVehicleId === vehicle.id}
+                    >
+                      <option value="">Assign Driver</option>
+                      {drivers.map((driver) => (
+                        <option key={driver.id} value={driver.id}>
+                          {driver.email || driver.name}
+                        </option>
+                      ))}
+                    </select>
+                    {vehicle.driverId && (
+                      <button
+                        onClick={() => handleUnassignDriver(vehicle.id)}
+                        className="btn-unassign"
+                        disabled={assigningVehicleId === vehicle.id}
+                      >
+                        {assigningVehicleId === vehicle.id ? 'Unassigning...' : 'Unassign'}
+                      </button>
+                    )}
+                  </>
                 )}
                 <button
                   onClick={() => handleDeleteVehicle(vehicle.id)}
@@ -288,4 +534,3 @@ const VehicleManagement = ({ refreshKey = 0 }) => {
 };
 
 export default VehicleManagement;
-

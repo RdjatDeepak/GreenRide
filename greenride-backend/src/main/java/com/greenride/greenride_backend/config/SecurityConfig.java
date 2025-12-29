@@ -91,26 +91,36 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // 1. Disable these to stop the "Pre-authenticated" entry point error
+                .httpBasic(basic -> basic.disable())
+                .formLogin(form -> form.disable())
                 .authenticationProvider(authenticationProvider())
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(
-                                "/api/auth/**",
-                                "/swagger-ui/**",
-                                "/v3/api-docs/**"
-                        ).permitAll()
-                        .requestMatchers("/error").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/drivers/apply/status").authenticated()
-                        .requestMatchers(HttpMethod.POST, "/api/drivers/apply").authenticated()
-                        .requestMatchers("/ws/**").permitAll()
-                        .requestMatchers("/api/admin/**").hasAnyRole("ADMIN")
+                        // 2. Permit all essential and public endpoints first
+                        .requestMatchers("/api/auth/**", "/api/route/**", "/ws/**", "/error", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+//                        .requestMatchers("/api/route/calculate-optimize").permitAll() // Force open for testing
+                                // (Specific rule for applying) and status
+                                .requestMatchers("/api/drivers/apply/**").hasAnyRole("USER", "DRIVER" ,"ADMIN")
+                                .requestMatchers("/api/drivers/**").hasAnyRole("DRIVER", "ADMIN")
+                                .requestMatchers("/api/vehicles/nearby").hasAnyRole("USER")
+                                // Inside your filterChain method
+                                .requestMatchers("/api/vehicles/**").hasAnyRole("USER", "ADMIN")
+                                .requestMatchers("/api/trips/request").hasAnyRole("USER")
+                                .requestMatchers("/api/trips/history").hasAnyRole("USER")
+                                .requestMatchers("/api/user/**").hasRole("USER")
 
-                        // hasAnyRole for api these roles are necessary to access this
-                        .requestMatchers("/api/drivers/**").hasAnyRole("DRIVER", "ADMIN")
+                                // 3. Driver/Admin specific rules
+
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+
+
+                        // 4. Require authentication for everything else
                         .anyRequest().authenticated()
                 );
-        http.addFilterBefore(authenticationJwtTokenFilter() , UsernamePasswordAuthenticationFilter.class);
+
+        // 5. Add your JWT filter
+        http.addFilterBefore(authenticationJwtTokenFilter(), UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
-
 }

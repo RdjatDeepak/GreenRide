@@ -38,6 +38,7 @@ export const AuthProvider = ({ children }) => {
         const userData = {
           email: result.data.email,
           roles: result.data.roles,
+          name: result.data.name,
         };
         setUser(userData);
         setIsLoading(false);
@@ -58,30 +59,20 @@ export const AuthProvider = ({ children }) => {
   const register = async (userData) => {
     setError(null);
     setIsLoading(true);
-    
+
     try {
       const result = await registerApi(userData);
-      
+
       if (result.success) {
-        // After successful registration, automatically log in
-        const loginResult = await loginApi({
+        // Set user from registration data directly
+        const userInfo = {
           email: userData.email,
-          password: userData.password,
-        });
-        
-        if (loginResult.success) {
-          const userInfo = {
-            email: loginResult.data.email,
-            roles: loginResult.data.roles,
-          };
-          setUser(userInfo);
-          setIsLoading(false);
-          return { success: true, user: userInfo };
-        } else {
-          setError(loginResult.error);
-          setIsLoading(false);
-          return { success: false, error: loginResult.error };
-        }
+          roles: ['ROLE_PASSENGER'], // Default role
+          name: userData.name,
+        };
+        setUser(userInfo);
+        setIsLoading(false);
+        return { success: true, user: userInfo };
       } else {
         setError(result.error);
         setIsLoading(false);
