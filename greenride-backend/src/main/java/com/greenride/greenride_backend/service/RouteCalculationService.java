@@ -10,33 +10,40 @@ public class RouteCalculationService {
 
     public RouteResponseDTO calculateOptimizedRoute(RouteRequestDto request, RangePredictionDTO prediction) {
         RouteResponseDTO response = new RouteResponseDTO();
-
+        // if prediction is null then
+        if (prediction == null || prediction.getFinalSOC() == null) {
+            // Fallback values so the app doesn't crash
+            response.setPredictedFinalSOC(request.getCurrentBatterySOC());
+            response.setOptimizedRoutePolyline("ORIGINAL_DIRECT_POLYLINE");
+            response.setRecommendedChargingStopLocation("ML Service Timeout - No Recommendation");
+            response.setEstimatedTotalTimeMinutes(30);
+            return response;
+        }
         // Map the critical ML data to the Response DTO
         response.setPredictedFinalSOC(prediction.getFinalSOC());
         response.setChargingStopInserted(prediction.isRequiresChargingStop());
 
         // Business logic for routing
         if (prediction.isRequiresChargingStop()) {
-            // In a real scenario, you'd fetch the closest charging station based on coordinates
-            response.setOptimizedRoutePolyline("ENCODED_POLYLINE_VIA_CHARGING_STATION");
-            response.setRecommendedChargingStopLocation("28.6139, 77.2090");
+            response.setOptimizedRoutePolyline(prediction.getPolyline() != null ? prediction.getPolyline() : "CHARGING_PATH");
+            response.setRecommendedChargingStopLocation("28.6139, 77.2090"); // Fixed fallback
             response.setEstimatedChargingTimeMinutes(45);
-            response.setEstimatedTotalTimeMinutes(75); // Example travel time + charge
+            response.setEstimatedTotalTimeMinutes(75);
         } else {
-            // Use polyline from ML if provided, otherwise default to direct
             String poly = (prediction.getPolyline() != null) ? prediction.getPolyline() : "ORIGINAL_DIRECT_POLYLINE";
             response.setOptimizedRoutePolyline(poly);
-            response.setRecommendedChargingStopLocation("NONE");
-            response.setEstimatedChargingTimeMinutes(0);
+            response.setRecommendedChargingStopLocation(prediction.getRecommendation());
 
-            // Assume 1.5 mins per KM for total time calculation if not provided by ML
-            int calculatedTime = (int) (calculateManualDistance(request) * 1.5);
-            response.setEstimatedTotalTimeMinutes(calculatedTime > 0 ? calculatedTime : 30);
+            // Map time safely from prediction
+            int mins = (prediction.getEstimatedTotalTimeMinutes() != null) ? prediction.getEstimatedTotalTimeMinutes() : 30;
+            response.setEstimatedTotalTimeMinutes(mins);
+
+            response.setEstimatedChargingTimeMinutes(0);
         }
         return response;
     }
 
-    private double calculateManualDistance(RouteRequestDto req) {
+    public double calculateManualDistance(RouteRequestDto req) {
         double lat1 = req.getStartLat();
         double lon1 = req.getStartLng();
         double lat2 = req.getEndLat();

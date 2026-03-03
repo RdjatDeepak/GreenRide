@@ -118,4 +118,24 @@ public class DriverController {
         Trip activeTrip = tripService.getActiveTripForDriver(principal.getName());
         return ResponseEntity.ok(activeTrip);
     }
+    // 1. DRIVER ACCEPTS THE REQUEST
+    @PostMapping("/trips/{tripId}/accept")
+    public ResponseEntity<String> acceptTrip(@PathVariable Long tripId) {
+        tripService.updateTripStatus(tripId, "EN_ROUTE");
+        return ResponseEntity.ok("Trip accepted. Navigate to pickup!");
+    }
+
+    // 2. PASSENGER IS PICKED UP - TRIP STARTS
+    @PostMapping("/trips/{tripId}/start")
+    public ResponseEntity<String> startTrip(@PathVariable Long tripId) {
+        tripService.updateTripStatus(tripId, "IN_PROGRESS");
+        return ResponseEntity.ok("Trip started. Eco-route optimized!");
+    }
+
+    // 3. ARRIVED AT DESTINATION - TRIP COMPLETE
+    @PostMapping("/trips/{tripId}/complete")
+    public ResponseEntity<String> completeTrip(@PathVariable Long tripId) {
+        tripService.completeTrip(tripId);
+        return ResponseEntity.ok("Trip completed successfully!");
+    }
 }

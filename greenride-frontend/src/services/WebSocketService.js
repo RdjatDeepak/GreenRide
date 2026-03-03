@@ -22,7 +22,7 @@ class WebSocketService {
       return {
         id: `EV-${idx + 1}`,
         label: `EV-${idx + 1}`,
-        driverName: ['Ayesha', 'Rahul', 'Priya', 'Aman', 'Zara', 'Kabir'][idx % 6],
+         driverName: ['Ayesha', 'Rahul', 'Priya', 'Aman', 'Zara', 'Kabir'][idx % 6],
         latitude: baseLat + offsetLat,
         longitude: baseLng + offsetLng,
         speedKmph: clamp(25 + Math.random() * 30, 10, 60),
@@ -168,6 +168,52 @@ class WebSocketService {
       summary,
       receivedAt: payload.receivedAt ?? new Date().toISOString(),
     };
+  }
+
+  async subscribeToTripRequests(callback) {
+    try {
+      const topic = '/topic/trip-requests';
+      const unsubscribe = await this.subscribe(topic, (payload) => {
+        callback(payload);
+      });
+      return unsubscribe;
+    } catch (error) {
+      console.warn('WebSocket trip requests subscription failed, using mock', error);
+      // Mock trip request subscription for development
+      return this.startMockTripRequests(callback);
+    }
+  }
+
+  startMockTripRequests(callback) {
+    const mockTripRequest = () => {
+      const tripRequest = {
+        tripId: Math.floor(Math.random() * 10000),
+        pickupLat: 28.6139 + (Math.random() - 0.5) * 0.05,
+        pickupLng: 77.209 + (Math.random() - 0.5) * 0.05,
+        dropoffLat: 28.6139 + (Math.random() - 0.5) * 0.05,
+        dropoffLng: 77.209 + (Math.random() - 0.5) * 0.05,
+        estimatedFare: Math.floor(Math.random() * 500) + 100,
+        estimatedArrivalTime: '5-10 minutes',
+        passengerName: 'Mock Passenger',
+        passengerPhone: '+91-9876543210',
+        vehicleType: 'EV',
+        distance: Math.random() * 20 + 5,
+        duration: Math.floor(Math.random() * 30) + 10
+      };
+      callback(tripRequest);
+    };
+
+    // Simulate trip request every 30-60 seconds
+    const scheduleNext = () => {
+      const delay = 30000 + Math.random() * 30000;
+      setTimeout(() => {
+        mockTripRequest();
+        scheduleNext();
+      }, delay);
+    };
+
+    scheduleNext();
+    return () => {}; // Mock unsubscribe
   }
 
   startMockStream(callback, options = {}) {

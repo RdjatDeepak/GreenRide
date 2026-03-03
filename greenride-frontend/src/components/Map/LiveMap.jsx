@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import 'leaflet-routing-machine';
+import polyline from '@mapbox/polyline';
 import './LiveMap.css';
 
 import webSocketService from '../../services/WebSocketService';
@@ -51,7 +52,7 @@ const calculateDistance = (coord1, coord2) => {
     return R * c;
 };
 
-const LiveMap = ({ mode = 'passenger', bookedVehicleId, height = 500, onVehicleSelect, selectedVehicle, onDestinationSelect, destination, route }) => {
+const LiveMap = ({ mode = 'passenger', bookedVehicleId, height = 500, onVehicleSelect, selectedVehicle, onDestinationSelect, destination, route, onLocationUpdate }) => {
     console.log('LiveMap rendered with mode:', mode, 'height:', height);
 
     // State to hold the live position update
@@ -91,9 +92,8 @@ const LiveMap = ({ mode = 'passenger', bookedVehicleId, height = 500, onVehicleS
                                 // Update the state with the new live location
                                 setLivePosition([vehicleData.latitude, vehicleData.longitude]);
                                 console.log(`Driver at: ${vehicleData.latitude}, ${vehicleData.longitude}. Battery: ${vehicleData.batteryPct}%`);
-
-                                // Fetch ML prediction when live data is received
-                                fetchPrediction(vehicleData);
+                                // Note: fetchPrediction is now called explicitly when trip is confirmed, not on every location update
+                                // This prevents unnecessary API calls with null/empty values
                             }
                         } else if (mode === 'admin') {
                             // Admin mode: Only update existing vehicles with real-time data, don't replace the full list
@@ -204,22 +204,35 @@ const LiveMap = ({ mode = 'passenger', bookedVehicleId, height = 500, onVehicleS
         }
     }, [mode]);
 
+    // Callback to parent component when user location is obtained
+    useEffect(() => {
+        if (onLocationUpdate && userLocation) {
+            onLocationUpdate(userLocation);
+        }
+    }, [userLocation, onLocationUpdate]);
+
     // Function to fetch ML prediction
-    const fetchPrediction = async (vehicleData) => {
+    // Only call when there's an actual trip with known pickup/dropoff locations
+    const fetchPrediction = async (vehicleData, tripDistance = null) => {
         if (!vehicleData) return;
+
+        // Skip if no valid distance (tripDistance should be passed from parent component)
+        if (!tripDistance || tripDistance <= 0) {
+            console.log('Skipping prediction - no valid trip distance available');
+            return;
+        }
 
         setPredictionLoading(true);
         try {
-            // Mock prediction data for now - replace with actual API call
-            const mockPredictionData = {
+            const predictionData = {
                 vehicleId: vehicleData.id, // Required for route optimization
-                distance: 45.0, // This should come from trip data
+                distance: tripDistance, // Use actual trip distance
                 temperature: 22.0,
                 current_soc: vehicleData.batteryLevel || 85.0,
                 avg_speed: 55.0
             };
 
-            const result = await calculateRangePrediction(mockPredictionData);
+            const result = await calculateRangePrediction(predictionData);
             if (result.success) {
                 setPrediction(result.data);
             }
@@ -407,12 +420,12 @@ const LiveMap = ({ mode = 'passenger', bookedVehicleId, height = 500, onVehicleS
                     )}
 
                     {/* Show route polyline */}
-                    {route && route.length > 0 && (
+                    {route && (
                         <Polyline
-                            positions={route}
-                            color="blue"
-                            weight={5}
-                            opacity={0.7}
+                            positions={typeof route === 'string' ? polyline.decode(route) : route}
+                            color="#2e7d32" // Eco-green color
+                            weight={6}
+                            opacity={0.8}
                         />
                     )}
                 </MapContainer>

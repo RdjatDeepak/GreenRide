@@ -24,7 +24,7 @@ const RegisterPage = () => {
       if (user.roles?.includes('ROLE_ADMIN')) {
         navigate('/admin/dashboard');
       } else if (user.roles?.includes('ROLE_DRIVER')) {
-        navigate('/driver/home');
+        navigate('/drivers/home');
       } else {
         navigate('/home');
       }
@@ -45,7 +45,7 @@ const RegisterPage = () => {
         if (userRoles.includes('ROLE_ADMIN')) {
           navigate('/admin/dashboard');
         } else if (userRoles.includes('ROLE_DRIVER')) {
-          navigate('/driver/home');
+          navigate('/drivers/home');
         } else {
           navigate('/home');
         }

@@ -143,7 +143,7 @@ export const getDriverEarnings = async () => {
  * @param {number[]} coord2 - [lat, lng]
  * @returns {number} Distance in kilometers
  */
-const calculateDistance = (coord1, coord2) => {
+export const calculateDistance = (coord1, coord2) => {
   if (!coord1 || !coord2 || coord1.length !== 2 || coord2.length !== 2) return Infinity;
 
   const [lat1, lng1] = coord1;
@@ -178,7 +178,7 @@ export const requestTrip = async (tripData) => {
     };
   } catch (error) {
     console.log('Trip request API not available - simulating successful request for development');
-    console.error('Failed to request trip:', error);
+    console.error('Failed to request trip:', error?.message || error);
 
     // Simulate successful trip request for development
     const mockResponse = {
@@ -216,6 +216,102 @@ export const getNearbyVehicles = async (latitude, longitude) => {
     return {
       success: false,
       error: error.response?.data?.message || error.message || 'Failed to get nearby vehicles',
+    };
+  }
+};
+
+/**
+ * Accept a trip request
+ * @param {number} tripId - Trip ID
+ * @returns {Promise<Object>} Accept response
+ */
+export const acceptTripRequest = async (tripId) => {
+  try {
+    const response = await api.post(`/driver/trips/${tripId}/accept`);
+    return {
+      success: true,
+      data: response.data,
+    };
+  } catch (error) {
+    console.log('Accept trip API not available - simulating successful acceptance for development');
+    console.error('Failed to accept trip:', error);
+
+    // Simulate successful trip acceptance for development
+    return {
+      success: true,
+      data: { message: 'Trip accepted successfully' },
+    };
+  }
+};
+
+/**
+ * Reject a trip request
+ * @param {number} tripId - Trip ID
+ * @returns {Promise<Object>} Reject response
+ */
+export const rejectTripRequest = async (tripId) => {
+  try {
+    const response = await api.post(`/driver/trips/${tripId}/reject`);
+    return {
+      success: true,
+      data: response.data,
+    };
+  } catch (error) {
+    console.log('Reject trip API not available - simulating successful rejection for development');
+    console.error('Failed to reject trip:', error);
+
+    // Simulate successful trip rejection for development
+    return {
+      success: true,
+      data: { message: 'Trip rejected successfully' },
+    };
+  }
+};
+
+/**
+ * Start a trip
+ * @param {number} tripId - Trip ID
+ * @returns {Promise<Object>} Start response
+ */
+export const startTrip = async (tripId) => {
+  try {
+    const response = await api.post(`/driver/trips/${tripId}/start`);
+    return {
+      success: true,
+      data: response.data,
+    };
+  } catch (error) {
+    console.log('Start trip API not available - simulating successful start for development');
+    console.error('Failed to start trip:', error);
+
+    // Simulate successful trip start for development
+    return {
+      success: true,
+      data: { message: 'Trip started successfully' },
+    };
+  }
+};
+
+/**
+ * Complete a trip
+ * @param {number} tripId - Trip ID
+ * @returns {Promise<Object>} Complete response
+ */
+export const completeTrip = async (tripId) => {
+  try {
+    const response = await api.post(`/driver/trips/${tripId}/complete`);
+    return {
+      success: true,
+      data: response.data,
+    };
+  } catch (error) {
+    console.log('Complete trip API not available - simulating successful completion for development');
+    console.error('Failed to complete trip:', error);
+
+    // Simulate successful trip completion for development
+    return {
+      success: true,
+      data: { message: 'Trip completed successfully' },
     };
   }
 };

@@ -29,4 +29,6 @@ public class RangePredictionDTO {
     private String unit;
     private String status;
     private String polyline;
+    private Double distanceKm; // To hold the real road distance
+    private Integer estimatedTotalTimeMinutes;
 }

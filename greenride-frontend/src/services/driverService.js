@@ -9,7 +9,7 @@ import api from './api';
  */
 export const submitDriverRequest = async (requestData) => {
   try {
-    const response = await api.post('/drivers/request', requestData);
+    const response = await api.post('/drivers/apply', requestData);
     return {
       success: true,
       data: response.data,
@@ -28,7 +28,7 @@ export const submitDriverRequest = async (requestData) => {
  */
 export const getDriverRequestStatus = async () => {
   try {
-    const response = await api.get('/apply/status');
+    const response = await api.get('/drivers/apply/status');
     return {
       success: true,
       data: response.data,

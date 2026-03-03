@@ -12,6 +12,7 @@ import lombok.Setter;
 @AllArgsConstructor
 public class RouteResponseDTO {
     //The optimized route path encoded in plolyLine
+    @JsonProperty("polyline")
     private String optimizedRoutePolyline;
 
     //estimated total travel time  included charging

@@ -6,6 +6,7 @@ import DriverRequestForm from '../../components/driver/DriverRequestForm';
 import { submitDriverRequest, getDriverRequestStatus } from '../../services/driverService';
 import { calculateRangePrediction, getTrafficLightColor, getAlertMessage } from '../../services/mlService';
 import { getRideHistory, requestTrip, getNearbyVehicles } from '../../services/rideService';
+import polyline from '@mapbox/polyline';
 
 // Calculate distance between two coordinates in kilometers
 const calculateDistance = (coord1, coord2) => {
@@ -77,41 +78,34 @@ const PassengerHome = () => {
     }
   }, [user]);
 
-  // Fetch prediction on component mount and periodically
-  useEffect(() => {
-    const fetchPrediction = async () => {
-      setPredictionLoading(true);
-      try {
-        // Mock prediction data for passenger's trip
-        const mockPredictionData = {
-          distance: 45.0, // This should come from booked trip data
-          temperature: 22.0,
-          current_soc: 85.0,
-          avg_speed: 55.0
-        };
+  // Fetch prediction only when a vehicle is selected and trip is confirmed
+  // This ensures the API is called with proper trip data (distance from pickup to destination)
+  const fetchPredictionForTrip = async (pickup, dropoff, vehicleId) => {
+    if (!pickup || !dropoff || !vehicleId) return;
+    
+    setPredictionLoading(true);
+    try {
+      // Calculate actual distance from pickup to destination
+      const distance = calculateDistance(pickup, dropoff);
+      
+      const predictionData = {
+        vehicleId: vehicleId,
+        distance: distance,
+        temperature: 22.0,
+        current_soc: 85.0, // This should come from vehicle data in real implementation
+        avg_speed: 55.0
+      };
 
-        const result = await calculateRangePrediction({
-            vehicleId: selectedVehicle?.id || 1, // Required for route optimization - fallback to 1 if no vehicle selected
-            ...mockPredictionData
-        });
-        if (result.success) {
-          setPrediction(result.data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch prediction:', error);
-      } finally {
-        setPredictionLoading(false);
+      const result = await calculateRangePrediction(predictionData);
+      if (result.success) {
+        setPrediction(result.data);
       }
-    };
-
-    // Initial fetch
-    fetchPrediction();
-
-    // Set up polling every 5 minutes
-    const interval = setInterval(fetchPrediction, 5 * 60 * 1000);
-
-    return () => clearInterval(interval);
-  }, []);
+    } catch (error) {
+      console.error('Failed to fetch prediction:', error);
+    } finally {
+      setPredictionLoading(false);
+    }
+  };
 
   const handleSubmitDriverRequest = async (formData) => {
     setIsSubmitting(true);
@@ -182,9 +176,15 @@ const PassengerHome = () => {
       return;
     }
 
-    // Validate coordinates to prevent unrealistic distance calculations
-    const pickupLat = userLocation ? userLocation[0] : 28.6139;
-    const pickupLng = userLocation ? userLocation[1] : 77.2090;
+    // Require user location - cannot proceed without it
+    if (!userLocation) {
+      setMessage({ type: 'error', text: 'Unable to get your current location. Please allow location access and refresh the page.' });
+      return;
+    }
+
+    // Use dynamic coordinates from userLocation
+    const pickupLat = userLocation[0];
+    const pickupLng = userLocation[1];
     const dropLat = destination[0];
     const dropLng = destination[1];
 
@@ -235,11 +235,18 @@ const PassengerHome = () => {
       if (result.success) {
         setMessage({ type: 'success', text: 'Trip requested successfully!' });
         setShowBookingModal(false);
+        
+        // Calculate route and fetch prediction after successful trip request
+        const pickupCoords = [pickupLat, pickupLng];
+        const dropoffCoords = [dropLat, dropLng];
+        calculateRoute(pickupCoords, dropoffCoords);
+        
+        // Fetch range prediction for this trip
+        fetchPredictionForTrip(pickupCoords, dropoffCoords, selectedVehicle.id);
+        
         setSelectedVehicle(null);
         setDestination(null);
         setDestinationSearch('');
-        // Calculate route for display
-        calculateRoute(userLocation, destination);
       } else {
         setMessage({ type: 'error', text: result.error });
       }
@@ -309,17 +316,33 @@ const PassengerHome = () => {
     setDestinationSearch(`${coords[0].toFixed(4)}, ${coords[1].toFixed(4)}`);
   };
 
+  // Handle location update from LiveMap component
+  const handleLocationUpdate = (location) => {
+    setUserLocation(location);
+  };
+
   const calculateRoute = async (start, end) => {
     if (!start || !end) return;
 
     try {
-      // Use OSRM routing service
-      const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson`);
+      // Use backend API for routing with OSRM
+      const response = await fetch(`http://localhost:8080/api/routes?startLat=${start[0]}&startLng=${start[1]}&endLat=${end[0]}&endLng=${end[1]}`);
       const data = await response.json();
 
-      if (data.routes && data.routes.length > 0) {
-        const routeCoords = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
-        setRoute(routeCoords);
+      if (data.polyline) {
+        // Pass the raw polyline string to LiveMap for decoding
+        setRoute(data.polyline);
+      } else {
+        // Fallback to public OSRM if backend doesn't provide polyline
+        const fallbackResponse = await fetch(`https://router.project-osrm.org/route/v1/driving/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson`);
+        const fallbackData = await fallbackResponse.json();
+
+        if (fallbackData.routes && fallbackData.routes.length > 0) {
+          // Encode the geojson coordinates to polyline format for consistency
+          const routeCoords = fallbackData.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+          const encodedPolyline = polyline.encode(routeCoords);
+          setRoute(encodedPolyline);
+        }
       }
     } catch (error) {
       console.error('Route calculation error:', error);
@@ -428,6 +451,7 @@ const PassengerHome = () => {
             onDestinationSelect={handleDestinationSelect}
             destination={destination}
             route={route}
+            onLocationUpdate={handleLocationUpdate}
           />
         </div>
 

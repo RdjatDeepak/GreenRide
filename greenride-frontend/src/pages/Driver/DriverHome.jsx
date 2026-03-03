@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import ThemedBackground from '../../components/common/ThemedBackground';
 import { calculateRangePrediction, getTrafficLightColor, getAlertMessage } from '../../services/mlService';
-import { toggleDriverStatus, updateDriverLocation, getActiveRides, getDriverEarnings } from '../../services/rideService';
+import { toggleDriverStatus, updateDriverLocation, getActiveRides, getDriverEarnings, acceptTripRequest, rejectTripRequest, startTrip, completeTrip, calculateDistance } from '../../services/rideService';
+import webSocketService from '../../services/WebSocketService';
 import '../Dashboard.css';
 
 const DriverHome = () => {
@@ -15,36 +16,70 @@ const DriverHome = () => {
   const [earnings, setEarnings] = useState(null);
   const [showActiveRidesModal, setShowActiveRidesModal] = useState(false);
   const [showEarningsModal, setShowEarningsModal] = useState(false);
+  const [tripStatus, setTripStatus] = useState(null);
+  const [incomingTripRequest, setIncomingTripRequest] = useState(null);
 
+  // Function to calculate range prediction when trip is accepted
+  const calculateTripPrediction = async (tripRequest) => {
+    if (!tripRequest) return;
+    
+    setPredictionLoading(true);
+    try {
+      // Calculate distance from pickup to dropoff coordinates
+      const distance = calculateDistance(
+        [tripRequest.pickupLat, tripRequest.pickupLng],
+        [tripRequest.dropoffLat, tripRequest.dropoffLng]
+      );
+
+      const predictionData = {
+        vehicleId: tripRequest.vehicleId || 1, // Use vehicleId from trip request
+        distance: distance,
+        temperature: 22.0, // Default temperature - could get from weather API
+        current_soc: 85.0, // This should come from vehicle data in real implementation
+        avg_speed: 55.0
+      };
+
+      const result = await calculateRangePrediction(predictionData);
+      if (result.success) {
+        setPrediction(result.data);
+      }
+    } catch (error) {
+      console.error('Failed to calculate prediction:', error);
+    } finally {
+      setPredictionLoading(false);
+    }
+  };
+
+  // WebSocket subscription for trip requests
   useEffect(() => {
-    // Fetch prediction every 5 minutes
-    const fetchPrediction = async () => {
-      setPredictionLoading(true);
-      try {
-        // Mock prediction data for now - replace with actual API call
-        const mockPredictionData = {
-          distance: 45.0, // This should come from trip data
-          temperature: 22.0,
-          current_soc: 85.0,
-          avg_speed: 55.0
-        };
+    let unsubscribe = null;
 
-        const result = await calculateRangePrediction(mockPredictionData);
-        if (result.success) {
-          setPrediction(result.data);
-        }
+    const setupWebSocket = async () => {
+      try {
+        await webSocketService.connect();
+
+        // Subscribe to trip requests for this driver
+        unsubscribe = webSocketService.subscribeToTripRequests((tripRequest) => {
+          console.log('New trip request received:', tripRequest);
+          setIncomingTripRequest(tripRequest);
+          setTripStatus('PENDING');
+        });
+
       } catch (error) {
-        console.error('Failed to fetch prediction:', error);
-      } finally {
-        setPredictionLoading(false);
+        console.error('WebSocket setup error:', error);
       }
     };
 
-    fetchPrediction();
-    const interval = setInterval(fetchPrediction, 5 * 60 * 1000); // 5 minutes
+    if (user && isOnline) {
+      setupWebSocket();
+    }
 
-    return () => clearInterval(interval);
-  }, []);
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [user, isOnline]);
 
   const handleToggleOnline = async () => {
     setMessage({ type: '', text: '' });
@@ -122,6 +157,78 @@ const DriverHome = () => {
     }
   };
 
+  const handleAcceptTrip = async () => {
+    if (!incomingTripRequest) return;
+
+    try {
+      const result = await acceptTripRequest(incomingTripRequest.tripId);
+      if (result.success) {
+        setTripStatus('EN_ROUTE');
+        setMessage({ type: 'success', text: 'Trip accepted! Navigate to pickup location.' });
+        
+        // Calculate range prediction after accepting the trip
+        await calculateTripPrediction(incomingTripRequest);
+        
+        setIncomingTripRequest(null);
+      } else {
+        setMessage({ type: 'error', text: result.error });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to accept trip' });
+    }
+  };
+
+  const handleRejectTrip = async () => {
+    if (!incomingTripRequest) return;
+
+    try {
+      const result = await rejectTripRequest(incomingTripRequest.tripId);
+      if (result.success) {
+        setMessage({ type: 'info', text: 'Trip request rejected.' });
+        setIncomingTripRequest(null);
+        setTripStatus(null);
+      } else {
+        setMessage({ type: 'error', text: result.error });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to reject trip' });
+    }
+  };
+
+  const handleStartTrip = async () => {
+    if (!incomingTripRequest) return;
+
+    try {
+      const result = await startTrip(incomingTripRequest.tripId);
+      if (result.success) {
+        setTripStatus('IN_PROGRESS');
+        setMessage({ type: 'success', text: 'Trip started! Safe journey!' });
+      } else {
+        setMessage({ type: 'error', text: result.error });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to start trip' });
+    }
+  };
+
+  const handleCompleteTrip = async () => {
+    if (!incomingTripRequest) return;
+
+    try {
+      const result = await completeTrip(incomingTripRequest.tripId);
+      if (result.success) {
+        setTripStatus('COMPLETED');
+        setMessage({ type: 'success', text: 'Trip completed successfully!' });
+        setIncomingTripRequest(null);
+        setTripStatus(null);
+      } else {
+        setMessage({ type: 'error', text: result.error });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to complete trip' });
+    }
+  };
+
   return (
     <ThemedBackground>
       <div className="dashboard-container">
@@ -131,9 +238,70 @@ const DriverHome = () => {
             <button onClick={() => setMessage({ type: '', text: '' })} className="close-message">×</button>
           </div>
         )}
+
+        {/* Trip Status Banner */}
+        {tripStatus && (
+          <div className={`trip-status-banner ${tripStatus.toLowerCase().replace('_', '-')}`}>
+            <p className="trip-status-text">
+              Trip Status: {tripStatus === 'EN_ROUTE' ? 'En Route to Pickup' :
+                           tripStatus === 'IN_PROGRESS' ? 'Trip in Progress' :
+                           tripStatus === 'COMPLETED' ? 'Trip Completed' : tripStatus}
+            </p>
+            {tripStatus === 'EN_ROUTE' && (
+              <div style={{ marginTop: '10px' }}>
+                <button onClick={handleStartTrip} className="dashboard-feature" style={{ margin: '0', padding: '10px 20px', fontSize: '14px' }}>
+                  Start Trip (Passenger Picked Up)
+                </button>
+              </div>
+            )}
+            {tripStatus === 'IN_PROGRESS' && (
+              <div style={{ marginTop: '10px' }}>
+                <button onClick={handleCompleteTrip} className="dashboard-feature" style={{ margin: '0', padding: '10px 20px', fontSize: '14px' }}>
+                  Complete Trip (Arrived at Destination)
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Trip Request Notification */}
+        {incomingTripRequest && (
+          <div className="trip-request-notification">
+            <div className="trip-request-header">
+              <h3 className="trip-request-title">🚗 New Trip Request!</h3>
+              <p className="trip-request-timer">Accept within 30 seconds</p>
+            </div>
+            <div className="trip-request-details">
+              <div className="trip-request-detail">
+                <span>Pickup:</span>
+                <strong>{incomingTripRequest.dropoffLat?.toFixed(4)}, {incomingTripRequest.dropoffLng?.toFixed(4)}</strong>
+              </div>
+              <div className="trip-request-detail">
+                <span>Dropoff:</span>
+                <strong>{incomingTripRequest.dropoffLat?.toFixed(4)}, {incomingTripRequest.dropoffLng?.toFixed(4)}</strong>
+              </div>
+              <div className="trip-request-detail">
+                <span>Estimated Fare:</span>
+                <strong>₹{incomingTripRequest.estimatedFare}</strong>
+              </div>
+              <div className="trip-request-detail">
+                <span>ETA:</span>
+                <strong>{incomingTripRequest.estimatedArrivalTime}</strong>
+              </div>
+            </div>
+            <div className="trip-request-actions">
+              <button onClick={handleAcceptTrip} className="trip-request-accept">
+                ✅ Accept
+              </button>
+              <button onClick={handleRejectTrip} className="trip-request-reject">
+                ❌ Reject
+              </button>
+            </div>
+          </div>
+        )}
         <div className={`dashboard-card ${isOnline ? 'online' : 'offline'}`}>
           <div className="welcome-section">
-            <h1 className="dashboard-title">Welcome, {user?.name }!</h1>
+            <h1 className="dashboard-title">Welcome, {user?.name || 'Driver'}!</h1>
             <p className="dashboard-subtitle">Manage your rides and serve passengers</p>
           </div>
 
